@@ -1,6 +1,6 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiClientError } from '../lib/api'
 import { authApi, AUTH_QUERY_KEY, validateRegisterForm } from '../lib/auth'
 import { CART_QUERY_KEY } from '../lib/cart'
@@ -12,10 +12,15 @@ import { Input } from '../components/ui/Input'
 
 export function Register() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const queryClient = useQueryClient()
   const [values, setValues] = useState({ name: '', email: '', password: '', confirmPassword: '' })
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [serverError, setServerError] = useState<string | null>(null)
+
+  // Mesmo contrato do Login: só paths relativos, para não virar redirect aberto
+  const redirectParam = searchParams.get('redirect')
+  const redirectTo = redirectParam && redirectParam.startsWith('/') ? redirectParam : '/'
 
   useEffect(() => {
     document.title = 'Criar conta | Marketplace'
@@ -27,7 +32,7 @@ export function Register() {
       // a API autentica no registro (cookie de sessão) e vincula o carrinho de visitante
       queryClient.setQueryData(AUTH_QUERY_KEY, user)
       queryClient.invalidateQueries({ queryKey: CART_QUERY_KEY })
-      navigate('/')
+      navigate(redirectTo)
     },
     onError: (error) => {
       setServerError(error instanceof ApiClientError ? error.message : 'Não foi possível criar a conta.')

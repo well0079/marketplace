@@ -5,6 +5,7 @@ export class ApiClientError extends Error {
     message: string,
     public readonly code: string,
     public readonly status: number,
+    public readonly fields?: Record<string, string>,
   ) {
     super(message)
   }
@@ -19,8 +20,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   const data = await res.json().catch(() => null)
   if (!res.ok) {
-    const err = (data as { error?: { code?: string; message?: string } } | null)?.error
-    throw new ApiClientError(err?.message ?? 'Erro inesperado.', err?.code ?? 'UNKNOWN', res.status)
+    const err = (data as { error?: { code?: string; message?: string; fields?: Record<string, string> } } | null)?.error
+    throw new ApiClientError(err?.message ?? 'Erro inesperado.', err?.code ?? 'UNKNOWN', res.status, err?.fields)
   }
   return data as T
 }

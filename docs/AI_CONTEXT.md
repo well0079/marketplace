@@ -3,9 +3,11 @@ Objetivo: marketplace estilo Mercado Livre (pt-BR/BRL), competição com prazo c
 Stack: React+Vite+TS+Tailwind3 | Express+TS+Prisma5+Postgres16 | pnpm monorepo.
 Regras: dinheiro em centavos; FastSoft só na fase final e server-side; nunca simular
 pagamento; nunca copiar código/ativos do ML; não trocar a stack.
-Fase atual: 8 (auth) concluída. Próximas: 9 checkout → 10 pedidos →
+Fase atual: 9 (checkout) concluída. Próximas: 10 pedidos →
 ... → 15 FastSoft.
 API: GET /api/v1/health · /products (q,page,limit,sort,category) · /products/:slug · /categories
+· /cart (+ /cart/items CRUD) · /auth/register|login|logout|me · /addresses (GET,POST,DELETE /:id)
+· /shipping/options?zipCode= (citação de frete pelo carrinho do cookie)
 
 ## FASE 1 — correções preservadas (não reverter)
 1. `ProductVariant.createdAt` existe no schema (service ordena variantes por ele).
@@ -152,3 +154,37 @@ Convenções:
   o carrinho do usuário. `getOrCreateCart` vincula userId e recupera o carrinho do usuário logado.
 - Header: visitante → link "Entrar"; logado → "Olá, {primeiro nome}" + "Sair" (invalida auth e
   carrinho) — desktop e menu mobile. Logout NÃO limpa cart_token (carrinho continua no navegador).
+
+## FASE 9 — Checkout
+- Backend: `shipping.service.ts` (regras de frete server-side: região pelo 1º dígito do CEP —
+  0-3 Sudeste, 4-6 N/NE, 7-9 S/CO; Normal grátis quando TODOS os itens do carrinho são
+  frete grátis, Expressa sempre paga; prazos em dias úteis — hipótese de negócio documentada,
+  como installments()); `address.controller.ts` (GET/POST/DELETE /addresses — exige sessão 401,
+  validação 400 com fields por campo, UF na lista dos 27, CEP normalizado a dígitos, primeiro
+  endereço nasce isDefault, novo isDefault desativa os demais, DELETE de próprio promove o mais
+  recente; isolamento por userId — endereço alheio vira 404); `shipping.controller.ts`
+  (GET /shipping/options?zipCode= usa o carrinho do cookie p/ saber se Normal sai grátis).
+- Frontend: `lib/checkout.ts` (Address/ShippingQuote, addressApi/shippingApi, ADDRESSES_QUERY_KEY,
+  shippingQueryKey(zip), validateAddressForm — MESMAS regras do servidor —, formatZipCode
+  (máscara 00000-000), formatAddressStreetLine/CityLine, UFS compartilhada Select+validação).
+- `pages/Checkout.tsx` substitui CheckoutStub (stub removido de stubs.tsx): portão de login para
+  anônimo (Button ganhou prop `to` → renderiza Link com o mesmo visual; links levam
+  ?redirect=/checkout); etapas 1 Endereço (radiogroup com botões reais role=radio + remover
+  FORA do botão de seleção; seleção DERIVADA — padrão da API ou primeiro — funciona em SSR,
+  state só sobrescreve escolha manual) → 2 Entrega (radios com Radio labelClassName novo;
+  Normal padrão; preço Grátis em text-success) → 3 Pagamento (Alert info: próxima fase — sem
+  CTA falso). Resumo sticky (lg:top-20) com itens, Produtos, Frete, Total.
+- `ApiClientError` ganhou `fields?: Record<string,string>` (retrocompatível) — erros 400 do
+  servidor mapeiam para os campos do formulário após validar no cliente.
+- Estado: meQuery/cartQuery/addressesQuery com enabled quando logado; carrinho vazio →
+  EmptyState; erros de cart/endereços/frete → ErrorState + retry INDEPENDENTES; remoção com
+  feedback "Removendo…" (aria-live) e botão desabilitado.
+- Register aceita ?redirect= (mesmo contrato do Login, só paths relativos).
+- Testes: backend address.test.ts (7) + shipping.test.ts (4); frontend checkout.test.ts (7,
+  funções puras) + Checkout.test.tsx (10, SSR). GOTCHA descoberto: queries com `enabled` por
+  query IGNORAM enabled:false do client nos testes de erro — usar `retryOnMount: false` +
+  `staleTime: Infinity` (erro semeado não é re-tentado no mount; dados semeados não refetcham).
+- Verificado no navegador: fluxo completo anônimo→gate, form com máscara/validação, cotação
+  Sudeste (Normal Grátis p/ item frete grátis, Expressa R$ 39,90), total atualizando,
+  desktop 1440px e mobile 390px sem overflow (fullPage screenshot costura com header sticky —
+  capturar por viewport).

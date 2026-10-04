@@ -1,4 +1,4 @@
-// Ícones decorativos do Header — sempre com aria-hidden (o significado vem do aria-label do pai)
+// Ícones decorativos do Header e do checkout — sempre com aria-hidden (o significado vem do aria-label do pai)
 import { cn } from '../../lib/cn'
 
 type IconProps = { className?: string }
@@ -46,6 +46,22 @@ export function CloseIcon({ className }: IconProps) {
   return (
     <svg aria-hidden viewBox="0 0 24 24" className={cn('h-5 w-5', className)} fill="none" stroke="currentColor" strokeWidth="2">
       <path d="m6 6 12 12M18 6 6 18" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function PlusIcon({ className }: IconProps) {
+  return (
+    <svg aria-hidden viewBox="0 0 24 24" className={cn('h-5 w-5', className)} fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function TrashIcon({ className }: IconProps) {
+  return (
+    <svg aria-hidden viewBox="0 0 24 24" className={cn('h-5 w-5', className)} fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }

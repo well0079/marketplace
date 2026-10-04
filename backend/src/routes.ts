@@ -2,6 +2,8 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { getCategories, getHealth, getProduct, listProducts } from './controllers/catalog.controller'
 import { addCartItem, getCart, removeCartItem, updateCartItem } from './controllers/cart.controller'
 import { login, logout, me, register } from './controllers/auth.controller'
+import { createAddress, deleteAddress, listAddresses } from './controllers/address.controller'
+import { getShippingOptions } from './controllers/shipping.controller'
 
 // Express 4 não captura rejeições de handlers async — wrapper obrigatório
 const asyncHandler =
@@ -24,3 +26,7 @@ router.post('/auth/register', asyncHandler(register))
 router.post('/auth/login', asyncHandler(login))
 router.post('/auth/logout', asyncHandler(logout))
 router.get('/auth/me', asyncHandler(me))
+router.get('/addresses', asyncHandler(listAddresses))
+router.post('/addresses', asyncHandler(createAddress))
+router.delete('/addresses/:id', asyncHandler(deleteAddress))
+router.get('/shipping/options', asyncHandler(getShippingOptions))

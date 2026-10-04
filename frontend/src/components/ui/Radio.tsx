@@ -3,10 +3,11 @@ import { cn } from '../../lib/cn'
 
 export type RadioProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> & {
   label?: ReactNode
+  labelClassName?: string
 }
 
 export const Radio = forwardRef<HTMLInputElement, RadioProps>(
-  ({ label, disabled, className, id: idProp, ...rest }, ref) => {
+  ({ label, labelClassName, disabled, className, id: idProp, ...rest }, ref) => {
     const autoId = useId()
     const id = idProp ?? autoId
     return (
@@ -27,7 +28,10 @@ export const Radio = forwardRef<HTMLInputElement, RadioProps>(
         {label && (
           <label
             htmlFor={id}
-            className="cursor-pointer text-body-small text-foreground peer-disabled:cursor-not-allowed peer-disabled:text-muted-foreground"
+            className={cn(
+              'cursor-pointer text-body-small text-foreground peer-disabled:cursor-not-allowed peer-disabled:text-muted-foreground',
+              labelClassName,
+            )}
           >
             {label}
           </label>

@@ -1,4 +1,5 @@
-import { forwardRef, type ButtonHTMLAttributes } from 'react'
+import { forwardRef, type AnchorHTMLAttributes, type ButtonHTMLAttributes } from 'react'
+import { Link } from 'react-router-dom'
 import { cn } from '../../lib/cn'
 
 export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'destructive' | 'link'
@@ -24,31 +25,53 @@ export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant
   size?: ButtonSize
   loading?: boolean
+  // Renderiza um <Link> com o mesmo visual (ações de navegação viram links reais)
+  to?: string
+}
+
+function buttonClasses({ variant, size, className }: { variant: ButtonVariant; size: ButtonSize; className?: string }) {
+  return cn(
+    'inline-flex select-none items-center justify-center gap-2 rounded font-medium transition-colors duration-150',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+    'disabled:pointer-events-none disabled:opacity-50',
+    VARIANTS[variant],
+    variant !== 'link' && SIZES[size],
+    className,
+  )
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ variant = 'primary', size = 'md', loading = false, disabled, className, children, type = 'button', ...rest }, ref) => (
-    <button
-      ref={ref}
-      type={type}
-      disabled={disabled || loading}
-      aria-busy={loading || undefined}
-      className={cn(
-        'inline-flex select-none items-center justify-center gap-2 rounded font-medium transition-colors duration-150',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-        'disabled:pointer-events-none disabled:opacity-50',
-        VARIANTS[variant],
-        variant !== 'link' && SIZES[size],
-        className,
-      )}
-      {...rest}
-    >
-      {loading && (
-        <span aria-hidden className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent" />
-      )}
-      {children}
-    </button>
-  ),
+  ({ variant = 'primary', size = 'md', loading = false, disabled, className, children, type = 'button', to, ...rest }, ref) => {
+    const classes = buttonClasses({ variant, size, className })
+    if (to) {
+      // handlers/attrs de <button> são compatíveis com <a> em runtime; o cast cobre
+      // só a diferença de tipos do React (HTMLButtonElement vs HTMLAnchorElement)
+      const linkProps = rest as unknown as AnchorHTMLAttributes<HTMLAnchorElement>
+      return (
+        <Link to={to} aria-disabled={disabled || loading || undefined} className={classes} {...linkProps}>
+          {loading && (
+            <span aria-hidden className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          )}
+          {children}
+        </Link>
+      )
+    }
+    return (
+      <button
+        ref={ref}
+        type={type}
+        disabled={disabled || loading}
+        aria-busy={loading || undefined}
+        className={classes}
+        {...rest}
+      >
+        {loading && (
+          <span aria-hidden className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent" />
+        )}
+        {children}
+      </button>
+    )
+  },
 )
 
 Button.displayName = 'Button'

@@ -1,5 +1,27 @@
 # CHANGELOG
 
+## FASE 9 — Checkout: endereços + frete real (2026-10-04)
+- Backend: `GET/POST /addresses` + `DELETE /addresses/:id` (sessão obrigatória; validação 400 com
+  fields; CEP normalizado; primeiro endereço nasce padrão; isolamento por usuário) e
+  `GET /shipping/options?zipCode=` — regras de frete server-side em `shipping.service.ts`
+  (região pelo 1º dígito do CEP em 3 faixas; Normal grátis só quando TODO o carrinho é
+  frete grátis; Expressa sempre paga; prazos em dias úteis). Zero dependências novas,
+  zero migrations (Address já existia no schema).
+- Frontend: `/checkout` real substitui o stub — portão de login p/ anônimos (redirect de volta),
+  etapa 1 endereço (selecionar/adicionar/remover com validação client espelhando o servidor e
+  erros 400 mapeados por campo via novo `ApiClientError.fields`), etapa 2 entrega (citação por
+  região com Normal/Expressa, Grátis em verde), etapa 3 pagamento (Alert informativo — FASE 10),
+  resumo sticky com total = produtos + frete. `lib/checkout.ts` novo (API + validações puras +
+  máscara de CEP); `Button` ganhou prop `to` (renderiza Link com o mesmo visual); `Radio` ganhou
+  `labelClassName`; Register aceita `?redirect=` como o Login.
+- Testes: +11 no backend (address 7, shipping 4 — 38 total) e +17 no frontend (lib 7, página 10 —
+  76 total; suíte geral 114). Descoberta registrada: em testes SSR, queries com `enabled`
+  por-query ignoram `enabled:false` do client — usar `retryOnMount:false` + `staleTime:Infinity`
+  para semear estado de erro.
+- Verificação manual no navegador (desktop 1440/mobile 390): gate, formulário com máscara,
+  cotação Sudeste com Normal grátis (carrinho 100% frete grátis), total atualizando ao trocar
+  para Expressa, estados de erro/empty isolados por seção.
+
 ## FASE 8 — Autenticação + vínculo do carrinho (2026-10-04)
 - Backend: `/auth/register|login|logout|me` com scrypt (node:crypto, zero deps) e sessão em cookie
   `auth_token` httpOnly assinado por HMAC-SHA256 (AUTH_SECRET no .env; stateless — logout expira
