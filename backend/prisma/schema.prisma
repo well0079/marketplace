@@ -1,0 +1,231 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String
+  email        String   @unique
+  passwordHash String
+  phone        String?
+  role         String   @default("customer")
+  status       String   @default("active")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  addresses Address[]
+  carts     Cart[]
+  orders    Order[]
+  favorites Favorite[]
+  reviews   Review[]
+  questions Question[]
+}
+
+model Address {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  label      String?
+  recipient  String
+  zipCode    String
+  street     String
+  number     String
+  complement String?
+  district   String
+  city       String
+  state      String
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+}
+
+model Category {
+  id       String  @id @default(uuid()) @db.Uuid
+  name     String
+  slug     String  @unique
+  parentId String? @db.Uuid
+  icon     String?
+  position Int     @default(0)
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+  products Product[]
+  @@index([parentId])
+}
+
+model Product {
+  id            String   @id @default(uuid()) @db.Uuid
+  categoryId    String   @db.Uuid
+  title         String
+  slug          String   @unique
+  description   String
+  brand         String?
+  price         Int
+  originalPrice Int?
+  freeShipping  Boolean  @default(false)
+  condition     String   @default("new")
+  status        String   @default("active")
+  ratingAvg     Float    @default(0)
+  ratingCount   Int      @default(0)
+  soldCount     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  category  Category         @relation(fields: [categoryId], references: [id])
+  images    ProductImage[]
+  variants  ProductVariant[]
+  favorites Favorite[]
+  reviews   Review[]
+  questions Question[]
+  @@index([categoryId])
+  @@index([status, createdAt])
+}
+
+model ProductImage {
+  id        String   @id @default(uuid()) @db.Uuid
+  productId String   @db.Uuid
+  url       String
+  alt       String?
+  position  Int      @default(0)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  @@index([productId, position])
+}
+
+// Regra: todo produto tem >= 1 variante (produto simples = attributes {}). CHECK stock>=0 em service.
+model ProductVariant {
+  id            String  @id @default(uuid()) @db.Uuid
+  productId     String  @db.Uuid
+  attributes    Json
+  priceOverride Int?
+  stock         Int     @default(0)
+  active        Boolean @default(true)
+  createdAt     DateTime @default(now())
+  product    Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+  @@index([productId])
+}
+
+model Cart {
+  id        String   @id @default(uuid()) @db.Uuid
+  token     String   @unique
+  userId    String?  @db.Uuid
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user  User?      @relation(fields: [userId], references: [id])
+  items CartItem[]
+}
+
+model CartItem {
+  id        String   @id @default(uuid()) @db.Uuid
+  cartId    String   @db.Uuid
+  variantId String   @db.Uuid
+  quantity  Int
+  addedAt   DateTime @default(now())
+  cart    Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [variantId], references: [id])
+  @@unique([cartId, variantId])
+}
+
+model Order {
+  id              String    @id @default(uuid()) @db.Uuid
+  code            String    @unique
+  userId          String    @db.Uuid
+  status          String    @default("pending")
+  subtotal        Int
+  shippingCost    Int       @default(0)
+  discount        Int       @default(0)
+  total           Int
+  shippingAddress Json
+  deliveryOption  Json?
+  idempotencyKey  String    @unique
+  expiresAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  user     User        @relation(fields: [userId], references: [id])
+  items    OrderItem[]
+  payments Payment[]
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+model OrderItem {
+  id              String @id @default(uuid()) @db.Uuid
+  orderId         String @db.Uuid
+  variantId       String @db.Uuid
+  productSnapshot Json
+  unitPrice       Int
+  quantity        Int
+  lineTotal       Int
+  order   Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [variantId], references: [id])
+  @@index([orderId])
+}
+
+model Payment {
+  id                    String   @id @default(uuid()) @db.Uuid
+  orderId               String   @db.Uuid
+  provider              String   @default("fastsoft")
+  providerTransactionId String?
+  method                String?
+  amount                Int
+  status                String   @default("created")
+  requestPayload        Json?
+  responsePayload       Json?
+  idempotencyKey        String   @unique
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  order  Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  events PaymentEvent[]
+  @@index([orderId])
+}
+
+model PaymentEvent {
+  id              String    @id @default(uuid()) @db.Uuid
+  paymentId       String?   @db.Uuid
+  providerEventId String?   @unique
+  eventType       String
+  rawPayload      Json
+  signatureValid  Boolean   @default(false)
+  receivedAt      DateTime  @default(now())
+  processedAt     DateTime?
+  payment Payment? @relation(fields: [paymentId], references: [id])
+}
+
+model Favorite {
+  userId    String   @db.Uuid
+  productId String   @db.Uuid
+  createdAt DateTime @default(now())
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  @@id([userId, productId])
+}
+
+model Review {
+  id        String   @id @default(uuid()) @db.Uuid
+  productId String   @db.Uuid
+  userId    String   @db.Uuid
+  orderId   String?
+  rating    Int
+  title     String?
+  comment   String?
+  createdAt DateTime @default(now())
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([productId, userId])
+}
+
+model Question {
+  id         String    @id @default(uuid()) @db.Uuid
+  productId  String    @db.Uuid
+  userId     String    @db.Uuid
+  question   String
+  answer     String?
+  answeredAt DateTime?
+  createdAt  DateTime  @default(now())
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([productId, createdAt(sort: Desc)])
+}

@@ -1,0 +1,154 @@
+# AI_CONTEXT
+Objetivo: marketplace estilo Mercado Livre (pt-BR/BRL), competição com prazo curto.
+Stack: React+Vite+TS+Tailwind3 | Express+TS+Prisma5+Postgres16 | pnpm monorepo.
+Regras: dinheiro em centavos; FastSoft só na fase final e server-side; nunca simular
+pagamento; nunca copiar código/ativos do ML; não trocar a stack.
+Fase atual: 8 (auth) concluída. Próximas: 9 checkout → 10 pedidos →
+... → 15 FastSoft.
+API: GET /api/v1/health · /products (q,page,limit,sort,category) · /products/:slug · /categories
+
+## FASE 1 — correções preservadas (não reverter)
+1. `ProductVariant.createdAt` existe no schema (service ordena variantes por ele).
+2. `formatBRL` normaliza o espaço inseparável (U+00A0/U+202F) do Intl do Node 22.
+3. ESLint: `argsIgnorePattern: '^_'` (Express 4 exige `_next` no error handler).
+
+## FASE 2 — Design System
+Tokens (única fonte de verdade: `frontend/tailwind.config.js` — nada de hex nos componentes):
+- Cores semânticas: `background` `surface` `foreground` `muted-foreground` `border` e
+  `primary` (#3483FA, hover #2968C8) `secondary` (#FFE600) `success` (#00A650)
+  `warning` `destructive` `info` — cada cor de status tem `soft` (fundo claro) e
+  `soft-foreground` (texto) para Alert/Badge. Marca legada mantida: `ml.*`, `ink.*`, `page`, `line`.
+- Tipografia: `text-display h1 h2 h3 h4 body body-small caption label` (fonte Inter).
+- Sombras: `shadow-card` `shadow-card-hover` `shadow-elevated`. Raio padrão 6px.
+- Espaçamento: escala padrão do Tailwind; seções de página usam `py-8 md:py-12`.
+
+Componentes:
+- `components/layout/Container`: container global (max-w-[1200px], px-4 sm:px-6 lg:px-8).
+- `components/ui/`: Button (primary/secondary/outline/ghost/destructive/link × sm/md/lg/icon,
+  prop `loading`), Input, Select, Checkbox, Radio (label/helperText/error/disabled),
+  Badge (default/success/warning/destructive/info/outline), Card + Header/Title/Description/
+  Content/Footer, Skeleton + SkeletonText, Alert (info/success/warning/error),
+  Separator, Breadcrumb (recebe `{label, href?}[]`), EmptyState, ErrorState.
+- `components/ecommerce/`: ProductCard (+ ProductCardSkeleton; dados = ProductCardData),
+  CategoryCard, Price (SEMPRE via formatBRL/discountPercent de `lib/format` — nunca
+  formatar preço fora de lá), ProductImage (lazy, skeleton de loading, fallback de erro).
+
+Convenções:
+- Helper `cn()` (`lib/cn.ts`) para juntar classes condicionais.
+- Showcase visual em `/design` (rota de referência, não é página de negócio).
+- Estados visuais: focus = ring-2 ring-primary + ring-offset; disabled = opacity-50;
+  loading = spinner border-current ou Skeleton; hover = sutil (shadow/translate-y-0.5).
+- Animações ≤200ms; `prefers-reduced-motion` desativa tudo (globals.css).
+- Acessibilidade: foco visível global, alt em imagens, aria-label quando necessário,
+  role=alert em erro, labels associados por id, mobile-first (320/768/1024/1440).
+
+## FASE 3 — Header
+- `components/layout/Header.tsx` (sticky top-0 z-40, h-16, bg-surface, border-b border-line)
+  + `icons.tsx` (SVGs inline decorativos, aria-hidden fixo). Renderizado globalmente no App.
+- Desktop ≥lg: logo "marketplace" (2 tons, link /) · nav Home/Categorias/Ofertas (NavLink,
+  aria-current) · busca · favoritos · carrinho. Tablet ≥md: sem nav-links (usa hamburger).
+  Mobile <md: ☰ + logo + carrinho (favoritos some <sm).
+- Busca: Enter/botão navega para `/search?q=<termo>` (rota do catálogo da FASE 5 — NÃO é
+  /products, que não tem página e cairia no 404). Placeholders de nav: Categorias → /search,
+  Ofertas → /search?sort=price_asc. Sem autocomplete (fase futura).
+- Menu mobile: painel w-80 direita + overlay (clicável), fecha em X, ESC, clique em link e
+  overlay; trava scroll do body; foco vai ao botão fechar; animate-slide-in-right (200ms).
+- ÚNICA mudança no Design System: `Input` ganhou prop opcional `inputClassName` (para o
+  ícone dentro do campo de busca) — retrocompatível, sem mudança visual nos usos existentes.
+- Testes: `Header.test.tsx` via renderToStaticMarkup (sem jsdom/testing-library — zero deps
+  novas); interações (menu/ESC) validadas manualmente no navegador.
+
+## FASE 4 — Home
+- `pages/Home.tsx` na rota `/` (HomeStub removido de `pages/stubs.tsx`). Título via document.title.
+- 2 requests apenas: `GET /categories` (raízes, mostra até 8) e `GET /products?limit=20`
+  (mais vendidos). Destaques = items[0..4]; Ofertas = `pickOffers(items, 4)` de `lib/home.ts`
+  (produtos com discountPercent > 0, ordenados por maior desconto; se vazio, a seção não renderiza).
+- Categoria navega para `/search?category=<slug>` (contrato da API: filtro por slug).
+- Hero: h1 + CTA (Button → /search) + colagem 2×2 com 2 imagens reais de produtos
+  (progressiva — enquanto carrega mostra Skeleton) + 2 tiles de marca (bg-primary/bg-secondary).
+  Hero NÃO depende de API para aparecer.
+- Seções: hero → categorias → destaques → ofertas (condicional) → benefícios (4, institucional)
+  → CTA final (painel bg-primary + Button secondary). Loading com Skeleton/ProductCardSkeleton
+  por seção; erro com ErrorState + refetch por seção (uma seção falha não derruba as outras);
+  empty com EmptyState quando sem dados.
+- Testes: `Home.test.tsx` — estado de dados/erro semeado no cache do React Query
+  (setQueryData / QueryCache.build com status 'error' + client com enabled:false no teste de
+  erro, pois o resultado otimista do useQuery no render estático simula refetch).
+
+## FASE 5 — Catálogo (/search)
+- `pages/Search.tsx` — ÚNICA página de catálogo (busca + categoria + ofertas); URL é a fonte
+  da verdade via useSearchParams (q, category, sort, page). Refresh/back/forward preservam filtros.
+- Utilitários em `lib/home.ts`: `CATALOG_PAGE_SIZE` (12), `buildCatalogParams` (monta a query
+  do contrato real), `findCategoryName`, `linkableCategories` (folhas da árvore).
+- Contrato REAL de GET /products: q, category (slug EXATO), sort (relevance|price_asc|
+  price_desc|newest), page, limit (1–50) → { items, total, totalPages }. IMPORTANTE: o seed só
+  tem produtos em categorias FOLHA — raízes retornam 0. Por isso: sidebar mostra raízes como
+  agrupamentos (não clicáveis) e folhas como filtros; a Home usa `linkableCategories` (mudança
+  mínima documentada da FASE 4).
+- queryKey ['products', 'catalog', { q, category, sort, page }] (1 request por mudança);
+  categorias usam ['categories'] (cache compartilhado com a Home).
+- Sort select com os 4 valores do contrato. Paginação real (Anterior/Próxima + "Página X de Y",
+  reset de page ao mudar filtro). "Limpar filtros" só com filtro ativo → /search.
+- Mobile: botão Filtros abre drawer (mesmo padrão do menu do Header: overlay, ESC, foco no X,
+  scroll lock, fecha ao navegar). Toolbar com flex-wrap (evita overflow em 375px).
+- Título/SEO dinâmicos: `Busca: q | Marketplace`, `Categoria | Marketplace`, `Catálogo | Marketplace`.
+- Test util compartilhado: `src/test/query-test-utils.ts` (seedErrorState, agora aceita erro custom).
+
+## FASE 6 — Página de Produto (/product/:slug)
+- `pages/Product.tsx`: breadcrumb real da API → galeria (thumbs verticais à esquerda no desktop,
+  fileira com scroll-x no mobile) → info (vendidos, título, rating) → purchase box sticky
+  (condição, Price lg + parcelamento, chips de variante com aria-pressed, estoque, QuantitySelector,
+  frete grátis ou "frete no checkout", Comprar agora + Adicionar ao carrinho, Favoritar/Compartilhar)
+  → Descrição → Informações (marca/condição) → Produtos relacionados (mesma categoria via
+  /products?category=&limit=5, excluindo o próprio produto; seção some se vazio).
+- Helpers novos em `lib/home.ts`: `ProductDetail` (tipo), `variantAttributeGroups`, `clampQuantity`.
+- queryKey ['product', slug] com retry:false (404 é permanente); relacionados ['products','related',slug].
+- 404 → EmptyState "Produto não encontrado" + Voltar (detectado via ApiClientError.status === 404).
+- GRID BLOWOUT: filhos de grid com imagens precisam `min-w-0` (375px estourava 32px);
+  fileira Favoritar/Compartilhar usa flex-wrap (1024px estourava 4px). Thumbs mobile: overflow-x-auto.
+- Carrinho: botões mostram Alert "Carrinho em breve" (integração real é a FASE 7). Favoritar é
+  estado LOCAL apenas; Compartilhar usa navigator.share → fallback clipboard ("Link copiado!").
+- Parcelamento: deriva de `installments()` de lib/format (12x sem juros para >= R$150, teto —
+  regra documentada no próprio format.ts). Vendedor/perguntas/avaliações detalhadas: sem dados na
+  API → não implementados (limitação registrada).
+- Reference visual: mercadolivre.html NÃO existe no repo — visual seguiu os tokens ML das fases 1–2.
+
+## FASE 7 — Carrinho
+- Backend: `GET /api/v1/cart`, `POST /cart/items`, `PATCH /cart/items/:itemId`, `DELETE /cart/items/:itemId`
+  (`controllers/cart.controller.ts`, `services/cart.service.ts`, cookie `cart_token` httpOnly SameSite=Lax
+  30d em `lib/cookies.ts` — leitura manual do header, escrita via res.cookie; ZERO dependências novas).
+- Regras server-side: preço SEMPRE do banco (priceOverride ?? product.price); subtotal/lineTotal
+  calculados no servidor; valida variante ativa + produto ativo + estoque (409 INSUFFICIENT_STOCK);
+  quantidade inteira ≥1 (400 VALIDATION); mesma variante SOMA quantidade (upsert por
+  @@unique(cartId, variantId)); item de outro carrinho → 404; carrinho criado automaticamente no
+  primeiro POST, sem login.
+- Payload do carrinho: { items: [{ id, variantId, quantity, unitPrice, lineTotal, stock,
+  product: { slug, title, thumbnail, freeShipping, variantAttributes } }], subtotal, totalItems }.
+- Frontend: `lib/cart.ts` (cartApi + CART_QUERY_KEY ['cart'] compartilhado por Header/PDP/Cart);
+  `api.ts` ganhou patch/delete; `pages/Cart.tsx` (loading/empty/error/itens + resumo sticky +
+  Finalizar compra → /checkout stub + Continuar comprando); QuantitySelector extraído de
+  Product.tsx para `components/ui/QuantitySelector.tsx` (reuso PDP + carrinho).
+- PDP: Adicionar ao carrinho → mutation real + Alert success com "Ver carrinho"; Comprar agora →
+  adiciona e navega para /cart; erro (ex.: estoque) → Alert warning com a mensagem do servidor.
+- Header: badge com totalItems (só quando > 0) alimentado pelo mesmo cache ['cart'].
+- Cookie same-origin via proxy do Vite (dev). Em produção cross-origin será preciso
+  credentials: 'include' no fetch + CORS com credentials (limitação registrada).
+
+## FASE 8 — Autenticação
+- Backend (`lib/auth.ts`, `controllers/auth.controller.ts`): POST /auth/register, /auth/login,
+  /auth/logout, GET /auth/me. Senha com scrypt do node:crypto (`scrypt:salt:hash`), ZERO deps novas.
+- Sessão: cookie `auth_token` httpOnly SameSite=Lax 30d com token assinado HMAC-SHA256
+  (`userId.expiração.assinatura`, segredo em AUTH_SECRET do backend/.env). STATELESS: logout só
+  expira o cookie no cliente (sem revogação server-side — limitação). /auth/me → 401 quando anônimo.
+- Respostas de register/login/me retornam o usuário DIRETO ({id, name, email}) — mesmo formato;
+  nunca hash/senha. Erro de login genérico (INVALID_CREDENTIALS 401). Email duplicado → 409.
+- Frontend (`lib/auth.ts`): AUTH_QUERY_KEY ['auth','me'], fetchCurrentUser (401 → null),
+  validateLoginForm/validateRegisterForm (puras, testadas). Páginas Login/Register com Input/Button/
+  Alert do DS; register autentica automaticamente (API emite sessão no registro); login aceita
+  ?redirect=/caminho (só paths relativos).
+- MERGE DO CARRINHO no login/register (`mergeGuestCartForUser` em cart.service.ts): sem carrinho
+  do usuário → vincula o carrinho de visitante; com carrinho do usuário → mescla somando por
+  variante com clamp ao estoque e apaga o carrinho de visitante; cart_token passa a apontar para
+  o carrinho do usuário. `getOrCreateCart` vincula userId e recupera o carrinho do usuário logado.
+- Header: visitante → link "Entrar"; logado → "Olá, {primeiro nome}" + "Sair" (invalida auth e
+  carrinho) — desktop e menu mobile. Logout NÃO limpa cart_token (carrinho continua no navegador).

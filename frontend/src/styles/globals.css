@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-background font-sans text-foreground antialiased;
+}
+
+*:focus-visible {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 3px #2968c8, 0 0 0 5px rgba(65, 137, 230, 0.3);
+  outline: none;
+}
+
+button:disabled {
+  @apply cursor-not-allowed opacity-50;
+}
+
+/* Animações só quando o usuário não pede redução de movimento */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
