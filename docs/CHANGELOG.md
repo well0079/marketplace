@@ -1,5 +1,37 @@
 # CHANGELOG
 
+## FASE 10 — Pedidos: criação idempotente, snapshot, lista e detalhe (2026-10-04)
+- Backend: `POST /orders` (header `Idempotency-Key` obrigatório; body `{ addressId, deliveryOption }`;
+  totais e frete SEMPRE recalculados no servidor — valores do cliente ignorados; snapshot de
+  itens/endereço/entrega gravado no pedido; estoque apenas validado com 422 STOCK_INSUFFICIENT
+  por slug; pedido + limpeza do carrinho + `converted` na mesma transação; mesma key + mesmo
+  usuário devolve o pedido original 200, key de outro usuário 409), `GET /orders` paginado
+  (resumo com firstItemImage/itemsCount, mais recentes primeiro), `GET /orders/:code` e
+  `POST /orders/:code/cancel` (só pending; 404 para pedido de outro usuário). Código do pedido:
+  `RD-` + 8 chars sem I/O/0/1. Migrations: `Order.cancelledAt` e `OrderItem.createdAt`
+  (preserva a ordem dos itens do snapshot).
+- Carrinho: `getOrCreateCart` ignora carrinho `converted` (novas compras começam carrinho novo —
+  necessário após a conversão em pedido).
+- Frontend: etapa 3 do checkout virou **Revisão** (itens com atributos, endereço, entrega,
+  totais + botão "Confirmar pedido" com estado "Confirmando…"); Idempotency-Key por tentativa
+  (`resolveIdempotencyKey`: mudou endereço/entrega/carrinho → nova key; retry de rede → mesma
+  key); erros mapeados (estoque com link para o carrinho, carrinho vazio, genérico com retry).
+  Telas novas: `/checkout/pedido-recebido/:code` (pedido recebido — aguardando pagamento, sem
+  botão de pagar), `/orders` (lista paginada com badge de status) e `/orders/:code` (detalhe com
+  cancelamento em dois passos). `AuthGate` extraído (usado por checkout/pedidos); "Meus pedidos"
+  no Header (desktop + menu mobile); `api.post` aceita headers extras; `formatDate/formatDateTime`
+  em lib/format.
+- Testes: backend 16 novos em `order.test.ts` (54 total) — totais/frete do servidor, snapshot
+  imune a mudança de preço, idempotência (ausente/repetida/conflito entre usuários), carrinho
+  vazio, estoque, endereço alheio, cancelamento e isolamento por usuário; frontend +29 (lib 12,
+  Orders/OrderDetail/OrderReceived 12, Checkout de Revisão — 105 total; geral 159).
+- Verificado no navegador: registro com redirect, carrinho mesclado, checkout completo
+  (endereço → Expressa → revisão → confirmar), duplo clique no "Confirmar pedido" não duplica
+  (2º clique bloqueado pelo loading + idempotência server-side), carrinho zerado no Header após
+  o pedido, pedido recebido, lista, detalhe, cancelamento em dois passos; mobile 390px e 360px
+  sem overflow.
+- Docs: `API_REFERENCE.md` e `DECISIONS.md` criados (não existiam); TODO atualizado.
+
 ## FASE 9 — Checkout: endereços + frete real (2026-10-04)
 - Backend: `GET/POST /addresses` + `DELETE /addresses/:id` (sessão obrigatória; validação 400 com
   fields; CEP normalizado; primeiro endereço nasce padrão; isolamento por usuário) e

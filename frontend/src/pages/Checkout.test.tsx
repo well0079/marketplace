@@ -84,7 +84,7 @@ function renderCheckout(seed: Seed = {}) {
 describe('Checkout — carregando', () => {
   it('exibe skeleton enquanto verifica a sessão', () => {
     const html = renderCheckout()
-    expect((html.match(/animate-pulse/g) ?? []).length).toBeGreaterThan(2)
+    expect((html.match(/animate-pulse/g) ?? []).length).toBeGreaterThan(0)
   })
 })
 
@@ -92,8 +92,8 @@ describe('Checkout — portão de login', () => {
   it('usuário anônimo vê convite para entrar apontando de volta ao checkout', () => {
     const html = renderCheckout({ user: null, cart: CART })
     expect(html).toContain('Entre para finalizar a compra')
-    expect(html).toContain('/login?redirect=/checkout')
-    expect(html).toContain('/register?redirect=/checkout')
+    expect(html).toContain('/login?redirect=%2Fcheckout')
+    expect(html).toContain('/register?redirect=%2Fcheckout')
     expect(html).not.toContain('Resumo do pedido')
   })
 })
@@ -129,10 +129,10 @@ describe('Checkout — com itens e endereço', () => {
     expect(html).toContain('O total é finalizado após escolher a opção de entrega.')
   })
 
-  it('entrega e pagamento indicam próximos passos', () => {
+  it('etapas de endereço, entrega e revisão estão presentes', () => {
     expect(html).toContain('Endereço de entrega')
     expect(html).toContain('Entrega')
-    expect(html).toContain('Pagamento')
+    expect(html).toContain('Revisão')
   })
 })
 
@@ -148,6 +148,24 @@ describe('Checkout — opções de entrega', () => {
     expect(html).toContain('checked=""')
     // total = 20000 (produtos) + 0 (Normal)
     expect(html).toContain('R$ 200,00')
+  })
+})
+
+describe('Checkout — etapa de Revisão', () => {
+  it('revisão lista itens com atributos, quantidade, endereço, entrega e botão de confirmação', () => {
+    const html = renderCheckout({ user: USER, cart: CART, addresses: [ADDRESS], quote: QUOTE })
+    expect(html).toContain('Confirmar pedido')
+    expect(html).toContain('Cor: Azul')
+    expect(html).toContain('2 unidades · R$ 100,00 un.')
+    expect(html).toContain('Avenida Paulista, 1000')
+    expect(html).toContain('Normal — Chega entre 3 e 6 dias úteis (R$ 0,00)')
+    expect(html).toContain('Você não será cobrado agora')
+  })
+
+  it('botão Confirmar desabilitado enquanto a entrega não está definida', () => {
+    const html = renderCheckout({ user: USER, cart: CART, addresses: [ADDRESS] })
+    expect(html).toMatch(/disabled=""/)
+    expect(html).toContain('Escolha a entrega na etapa 2.')
   })
 })
 

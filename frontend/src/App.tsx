@@ -1,5 +1,5 @@
 import { Route, Routes } from 'react-router-dom'
-import { CategoryStub, OrdersStub } from './pages/stubs'
+import { CategoryStub } from './pages/stubs'
 import { NotFound } from './pages/NotFound'
 import { DesignSystemShowcase } from './pages/DesignSystemShowcase'
 import { Header } from './components/layout/Header'
@@ -10,6 +10,9 @@ import { Cart } from './pages/Cart'
 import { Login } from './pages/Login'
 import { Register } from './pages/Register'
 import { Checkout } from './pages/Checkout'
+import { OrderReceived } from './pages/OrderReceived'
+import { Orders } from './pages/Orders'
+import { OrderDetail } from './pages/OrderDetail'
 
 export function App() {
   return (
@@ -25,7 +28,9 @@ export function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/checkout" element={<Checkout />} />
-      <Route path="/orders" element={<OrdersStub />} />
+      <Route path="/checkout/pedido-recebido/:code" element={<OrderReceived />} />
+      <Route path="/orders" element={<Orders />} />
+      <Route path="/orders/:code" element={<OrderDetail />} />
       <Route path="*" element={<NotFound />} />
       </Routes>
     </>

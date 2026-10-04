@@ -1,8 +1,7 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 import { ApiClientError } from '../lib/api'
-import { AUTH_QUERY_KEY, fetchCurrentUser } from '../lib/auth'
 import { cartApi, CART_QUERY_KEY } from '../lib/cart'
 import {
   ADDRESSES_QUERY_KEY,
@@ -18,10 +17,19 @@ import {
   type AddressFormValues,
   type ShippingOption,
 } from '../lib/checkout'
+import {
+  ORDERS_QUERY_KEY,
+  describeOrderError,
+  newIdempotencyKey,
+  ordersApi,
+  resolveIdempotencyKey,
+  type IdempotencyLease,
+} from '../lib/orders'
 import { formatBRL } from '../lib/format'
 import { cn } from '../lib/cn'
 import { Container } from '../components/layout/Container'
 import { Alert } from '../components/ui/Alert'
+import { AuthGate } from '../components/ui/AuthGate'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -178,17 +186,22 @@ function ShippingPrice({ price }: { price: number }) {
 }
 
 export function Checkout() {
+  return (
+    <AuthGate
+      title="Entre para finalizar a compra"
+      description="Você precisa de uma conta para informar o endereço de entrega e concluir o pedido."
+    >
+      <CheckoutContent />
+    </AuthGate>
+  )
+}
+
+function CheckoutContent() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const meQuery = useQuery({ queryKey: AUTH_QUERY_KEY, queryFn: fetchCurrentUser })
-  const user = meQuery.data ?? null
-  const cartQuery = useQuery({ queryKey: CART_QUERY_KEY, queryFn: cartApi.get, enabled: !!user })
+  const cartQuery = useQuery({ queryKey: CART_QUERY_KEY, queryFn: cartApi.get })
 
-  const addressesQuery = useQuery({
-    queryKey: ADDRESSES_QUERY_KEY,
-    queryFn: addressApi.list,
-    enabled: !!user,
-  })
+  const addressesQuery = useQuery({ queryKey: ADDRESSES_QUERY_KEY, queryFn: addressApi.list })
   const addresses = addressesQuery.data
 
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null)
@@ -197,6 +210,7 @@ export function Checkout() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [serverError, setServerError] = useState<string | null>(null)
   const [optionId, setOptionId] = useState<ShippingOption['id']>('standard')
+  const [idempotencyLease, setIdempotencyLease] = useState<IdempotencyLease | null>(null)
 
   useEffect(() => {
     document.title = 'Finalizar compra | Marketplace'
@@ -252,6 +266,30 @@ export function Checkout() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ADDRESSES_QUERY_KEY }),
   })
 
+  // Assinatura da tentativa: mudou endereço/entrega/carrinho → nova Idempotency-Key;
+  // erro de rede no mesmo cenário reutiliza a key (a API devolve o pedido original)
+  const cart = cartQuery.data
+  const attemptSignature = useMemo(
+    () =>
+      [
+        selectedAddress?.id ?? '',
+        optionId ?? '',
+        ...(cart?.items.map((item) => `${item.variantId}:${item.quantity}`) ?? []),
+      ].join('|'),
+    [selectedAddress?.id, optionId, cart?.items],
+  )
+
+  const confirmMutation = useMutation({
+    mutationFn: (idempotencyKey: string) =>
+      ordersApi.create({ addressId: selectedAddress!.id, deliveryOption: optionId!, idempotencyKey }),
+    onSuccess: (order) => {
+      // carrinho virou pedido: contador do Header zera e a lista de pedidos recarrega
+      queryClient.setQueryData(CART_QUERY_KEY, { items: [], subtotal: 0, totalItems: 0 })
+      queryClient.invalidateQueries({ queryKey: ORDERS_QUERY_KEY })
+      navigate(`/checkout/pedido-recebido/${order.code}`)
+    },
+  })
+
   function submitAddressForm() {
     setServerError(null)
     const errors = validateAddressForm(formValues)
@@ -260,48 +298,14 @@ export function Checkout() {
     createAddressMutation.mutate(formValues)
   }
 
-  if (meQuery.isPending) {
-    return (
-      <main>
-        <Container className="flex flex-col gap-6 py-8">
-          <Skeleton className="h-8 w-56" />
-          <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-            <div className="flex flex-col gap-4">
-              <Skeleton className="h-24 w-full rounded-lg" />
-              <Skeleton className="h-24 w-full rounded-lg" />
-            </div>
-            <Skeleton className="h-48 w-full rounded-lg" />
-          </div>
-        </Container>
-      </main>
-    )
+  function confirmOrder() {
+    if (!selectedAddress || !selectedOption) return
+    const lease = resolveIdempotencyKey(idempotencyLease, attemptSignature, newIdempotencyKey)
+    setIdempotencyLease(lease)
+    confirmMutation.mutate(lease.key)
   }
 
-  if (!user) {
-    return (
-      <main>
-        <Container className="flex justify-center py-10 md:py-16">
-          <Card className="w-full max-w-md p-8 text-center">
-            <h1 className="text-h3 text-foreground">Entre para finalizar a compra</h1>
-            <p className="mt-2 text-body-small text-muted-foreground">
-              Você precisa de uma conta para informar o endereço de entrega e concluir o pedido.
-            </p>
-            <div className="mt-6 flex flex-col gap-2">
-              <Button size="lg" to="/login?redirect=/checkout">
-                Entrar
-              </Button>
-            </div>
-            <p className="mt-4 text-body-small text-muted-foreground">
-              Não tem conta?{' '}
-              <Link to="/register?redirect=/checkout" className="font-medium text-primary hover:underline">
-                Criar conta
-              </Link>
-            </p>
-          </Card>
-        </Container>
-      </main>
-    )
-  }
+  const confirmError = confirmMutation.error ? describeOrderError(confirmMutation.error) : null
 
   if (cartQuery.isPending) {
     return (
@@ -338,7 +342,6 @@ export function Checkout() {
     )
   }
 
-  const cart = cartQuery.data
   if (!cart || cart.items.length === 0) {
     return (
       <main>
@@ -526,13 +529,106 @@ export function Checkout() {
               ) : null}
             </Card>
 
-            {/* ETAPA 3 — PAGAMENTO (próxima fase) */}
+            {/* ETAPA 3 — REVISÃO E CONFIRMAÇÃO */}
             <Card className="flex flex-col gap-4 p-5">
-              <StepHeader step={3} title="Pagamento" />
-              <Alert variant="info" title="Pagamento em breve">
-                A etapa de pagamento será liberada na próxima fase. Seu endereço e a opção de entrega já
-                ficam prontos aqui.
-              </Alert>
+              <StepHeader step={3} title="Revisão" />
+
+              {confirmError?.kind === 'stock' && (
+                <Alert variant="error" title="Estoque insuficiente">
+                  {confirmError.message}{' '}
+                  <Link to="/cart" className="font-medium underline underline-offset-2">
+                    Revisar carrinho
+                  </Link>
+                </Alert>
+              )}
+              {confirmError?.kind === 'cart-empty' && (
+                <Alert variant="warning" title="Carrinho vazio">
+                  {confirmError.message}{' '}
+                  <Link to="/cart" className="font-medium underline underline-offset-2">
+                    Ir para o carrinho
+                  </Link>
+                </Alert>
+              )}
+              {confirmError?.kind === 'generic' && (
+                <Alert variant="error" title="Não foi possível confirmar o pedido">
+                  {confirmError.message} Ajuste o que for necessário e confirme de novo.
+                </Alert>
+              )}
+
+              <ul className="flex flex-col divide-y divide-line">
+                {cart.items.map((item) => (
+                  <li key={item.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                    <ProductImage
+                      src={item.product.thumbnail}
+                      alt={item.product.title}
+                      className="h-14 w-14 shrink-0 rounded-md"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="line-clamp-2 text-body-small font-medium text-foreground">{item.product.title}</p>
+                      <p className="text-caption text-muted-foreground">
+                        {Object.entries(item.product.variantAttributes)
+                          .map(([key, value]) => `${key}: ${value}`)
+                          .join(' · ') || 'Produto padrão'}
+                      </p>
+                      <p className="text-caption text-muted-foreground">
+                        {item.quantity} {item.quantity === 1 ? 'unidade' : 'unidades'} · {formatBRL(item.unitPrice)} un.
+                      </p>
+                    </div>
+                    <p className="text-body-small font-medium text-foreground">{formatBRL(item.lineTotal)}</p>
+                  </li>
+                ))}
+              </ul>
+
+              <Separator />
+
+              <dl className="flex flex-col gap-1.5 text-body-small">
+                <div className="flex gap-2">
+                  <dt className="w-20 shrink-0 text-muted-foreground">Endereço</dt>
+                  <dd className="min-w-0 text-foreground">
+                    {selectedAddress
+                      ? `${formatAddressStreetLine(selectedAddress)} — ${formatAddressCityLine(selectedAddress)}`
+                      : 'Escolha um endereço na etapa 1.'}
+                  </dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="w-20 shrink-0 text-muted-foreground">Entrega</dt>
+                  <dd className="min-w-0 text-foreground">
+                    {selectedOption
+                      ? `${selectedOption.label} — ${selectedOption.description} (${formatBRL(selectedOption.price)})`
+                      : 'Escolha a entrega na etapa 2.'}
+                  </dd>
+                </div>
+              </dl>
+
+              <Separator />
+
+              <div className="flex flex-col gap-1.5 text-body-small text-muted-foreground">
+                <div className="flex items-center justify-between">
+                  <span>Subtotal</span>
+                  <span>{formatBRL(cart.subtotal)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Frete</span>
+                  {selectedOption ? <ShippingPrice price={selectedOption.price} /> : <span>—</span>}
+                </div>
+                <div className="flex items-center justify-between text-h4 text-foreground">
+                  <span>Total</span>
+                  <span>{formatBRL(total)}</span>
+                </div>
+              </div>
+
+              <Button
+                size="lg"
+                className="w-full"
+                loading={confirmMutation.isPending}
+                disabled={!selectedAddress || !selectedOption}
+                onClick={confirmOrder}
+              >
+                {confirmMutation.isPending ? 'Confirmando…' : 'Confirmar pedido'}
+              </Button>
+              <p className="text-center text-caption text-muted-foreground">
+                Você não será cobrado agora — o pagamento será habilitado na próxima etapa.
+              </p>
             </Card>
           </div>
 

@@ -152,6 +152,12 @@ export function Header() {
               <span className="max-w-[120px] truncate px-2 text-body-small text-foreground">
                 Olá, {user.name.split(' ')[0]}
               </span>
+              <Link
+                to="/orders"
+                className="px-2 py-2 text-body-small text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Meus pedidos
+              </Link>
               <button
                 type="button"
                 onClick={() => logoutMutation.mutate()}
@@ -214,6 +220,13 @@ export function Header() {
                 <span className="px-3 text-body-small font-medium text-foreground">
                   Olá, {user.name.split(' ')[0]}
                 </span>
+                <Link
+                  to="/orders"
+                  onClick={closeMenu}
+                  className="rounded px-3 py-2 text-body-small text-foreground transition-colors hover:bg-page"
+                >
+                  Meus pedidos
+                </Link>
                 <button
                   type="button"
                   onClick={() => {

@@ -3,11 +3,12 @@ Objetivo: marketplace estilo Mercado Livre (pt-BR/BRL), competição com prazo c
 Stack: React+Vite+TS+Tailwind3 | Express+TS+Prisma5+Postgres16 | pnpm monorepo.
 Regras: dinheiro em centavos; FastSoft só na fase final e server-side; nunca simular
 pagamento; nunca copiar código/ativos do ML; não trocar a stack.
-Fase atual: 9 (checkout) concluída. Próximas: 10 pedidos →
-... → 15 FastSoft.
+Fase atual: 10 (pedidos) concluída. Próximas: 11+ pagamento (FastSoft por último, server-side).
 API: GET /api/v1/health · /products (q,page,limit,sort,category) · /products/:slug · /categories
 · /cart (+ /cart/items CRUD) · /auth/register|login|logout|me · /addresses (GET,POST,DELETE /:id)
 · /shipping/options?zipCode= (citação de frete pelo carrinho do cookie)
+· /orders (POST com header Idempotency-Key; GET paginado; GET/:code; POST/:code/cancel) —
+  contratos completos em docs/API_REFERENCE.md
 
 ## FASE 1 — correções preservadas (não reverter)
 1. `ProductVariant.createdAt` existe no schema (service ordena variantes por ele).
@@ -188,3 +189,36 @@ Convenções:
   Sudeste (Normal Grátis p/ item frete grátis, Expressa R$ 39,90), total atualizando,
   desktop 1440px e mobile 390px sem overflow (fullPage screenshot costura com header sticky —
   capturar por viewport).
+
+## FASE 10 — Pedidos
+- Backend (`services/order.service.ts`, `controllers/order.controller.ts`): POST /orders exige
+  header Idempotency-Key (400 se ausente). ORDEM das validações: idempotência (mesma key + mesmo
+  usuário → 200 pedido original; key de outro usuário → 409) → deliveryOption (400) → endereço
+  (404 se de outro usuário) → carrinho ativo do usuário com itens (422 CART_EMPTY) → estoque
+  (422 STOCK_INSUFFICIENT, fields por slug). Totais/frete recalculados do banco com
+  shippingQuote(address.zipCode, flags de freeShipping); pedido + deleteMany(CartItems) +
+  cart.status=converted na MESMA transação ($transaction com retry de code em colisão —
+  revalidando a key idempotente dentro do catch).
+- Code: `RD-` + 8 chars de `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (randomBytes; sem I/O/0/1).
+- Migrations desta fase: `order_cancelled_at` (Order.cancelledAt) e `order_item_created_at`
+  (OrderItem.createdAt — ordena o snapshot na ordem do carrinho; criado com Date.now()+index
+  dentro da transação para garantir asc).
+- `getOrCreateCart` (cart.service) IGNORA carrinhos converted (por token e por usuário) — sem
+  isso o primeiro POST /cart/items após um pedido reusaria o carrinho convertido.
+- Frontend: `lib/orders.ts` (ordersApi com header Idempotency-Key via novo 3º param de api.post;
+  ORDERS_QUERY_KEY ['orders'], ordersPageQueryKey(page), orderQueryKey(code);
+  resolveIdempotencyKey(lease, signature, generate) — signature = endereço|opção|variantId:qty;
+  orderStatusMeta, formatOrderItemAttributes, describeOrderError (stock/cart-empty/generic),
+  ApiErrorLike). Checkout.tsx dividido: Checkout = AuthGate + CheckoutContent; etapa 3 Revisão
+  com confirmMutation (loading 'Confirmando…', disabled sem endereço/entrega); sucesso →
+  setQueryData(['cart'], vazio) + invalidate ['orders'] + navigate /checkout/pedido-recebido/:code.
+- Páginas: OrderReceived (check verde + badge + alert honesto + resumo), Orders (lista paginada
+  via ?page=, placeholderData para troca de página suave), OrderDetail (badge, cancelamento em
+  dois passos inline — sem modal —, invalida lista ao cancelar). `AuthGate` (ui/AuthGate.tsx)
+  substituiu o gate inline do Checkout e protege as 3 páginas novas (redirect = pathname+search
+  encodados). Header: link "Meus pedidos" junto ao usuário (desktop) e no menu mobile.
+- TESTE GOTCHA (novo): para semear 404, passe o erro certo ao seedErrorState —
+  `new ApiClientError(msg, 'NOT_FOUND', 404)`; Error genérico cai no ErrorState genérico, não no
+  EmptyState (o componente decide por instanceof/status).
+- Formatação: formatDate/formatDateTime em lib/format (pt-BR; formatDateTime troca vírgula por
+  " às").

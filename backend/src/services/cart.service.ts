@@ -29,7 +29,8 @@ export const EMPTY_CART: CartPayload = { items: [], subtotal: 0, totalItems: 0 }
 
 // Retorna o carrinho do cookie ou cria um novo (emitindo o cookie na resposta).
 // Usuário autenticado: novo carrinho já nasce vinculado e, sem cookie válido,
-// recupera o carrinho mais recente dele.
+// recupera o carrinho mais recente dele. Carrinho "converted" (virou pedido) é
+// ignorado — novas compras começam um carrinho ativo.
 export async function getOrCreateCart(
   req: Parameters<typeof readCartToken>[0],
   res: Parameters<typeof setCartCookie>[0],
@@ -38,10 +39,13 @@ export async function getOrCreateCart(
   const token = readCartToken(req)
   if (token) {
     const existing = await prisma.cart.findUnique({ where: { token } })
-    if (existing) return existing
+    if (existing && existing.status === 'active') return existing
   }
   if (userId) {
-    const userCart = await prisma.cart.findFirst({ where: { userId }, orderBy: { createdAt: 'desc' } })
+    const userCart = await prisma.cart.findFirst({
+      where: { userId, status: 'active' },
+      orderBy: { createdAt: 'desc' },
+    })
     if (userCart) {
       setCartCookie(res, userCart.token)
       return userCart
