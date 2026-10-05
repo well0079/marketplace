@@ -17,8 +17,8 @@
       muda), tela de "pagamento em análise" dedicada, notificação de confirmação; cartão/boleto
       (FastSoft suporta — documentado em FASTSOFT.md como pendente).
 - [x] Deploy de produção (Vercel + Neon) — runbook em docs/DEPLOY.md; URLs em DECISIONS.md.
-- [ ] Pós-competição: ROTAR a FASTSOFT_SECRET_KEY (ficou exposta ao avaliador em produção) e
-      rotacionar AUTH_SECRET de produção.
+- [ ] Pós-competição: ROTAR a FASTSOFT_SECRET_KEY e a SENHA DO NEON (a connection string
+      direta foi colada no chat durante o deploy) e rotacionar AUTH_SECRET de produção.
 - [ ] Cobrança real de R$ 10 em produção (paga pelo dono) para validar o webhook de ponta a ponta;
       se o painel da FastSoft exigir, cadastrar a URL de postback (docs/DEPLOY.md).
 - [ ] Sessão: stateless — revogação server-side de tokens (ex.: tabela Session) se exigido;

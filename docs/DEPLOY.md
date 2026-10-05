@@ -39,8 +39,24 @@ DATABASE_URL="$DIRECT_DATABASE_URL" pnpm exec prisma db seed   # DESTRUTIVO: rod
 rm .env.deploy
 ```
 
-⚠️ **Seed já rodou exatamente uma vez em produção (05/10/2026)** — refazer apaga usuários,
-pedidos e pagamentos reais. Não rodar de novo sem decissão explícita.
+⚠️ **Seed já rodou exatamente uma vez em produção (05/10/2026 — 17 categorias, 32 produtos)** —
+refazer apaga usuários, pedidos e pagamentos reais. Não rodar de novo sem decisão explícita.
+
+## Validação de 05/10/2026 (evidências)
+
+| Item | Resultado |
+|---|---|
+| GET /health | 200 (0.84s) |
+| /products?q=notebook | 200, total=3, dados do Neon |
+| /categories + PDP | 200 (8 raízes) / 200 |
+| register → Set-Cookie → /me | cookie `auth_token` Secure chegou; /me 200 |
+| login/logout | 200/200/200/me→401 |
+| Pedido "Produto de teste Pix" + idempotência | 201 `RD-T6KQ9WLP` pending; mesma key → **200 mesmo pedido** (contrato: 200, não 409) |
+| POST /payments (Pix real) | 201 WAITING_PAYMENT, 1000 centavos, QR EMV copia-e-cola — **não pago** |
+| Webhook malformado | 400 INVALID_JSON (raw body sobreviveu ao serverless) |
+| Webhook transação desconhecida | 200 `{applied:false, unknown_transaction}` |
+| Cold start (1º request pós-deploy) | 0.92s |
+| pnpm test / lint / build | 198 testes ✓ / ✓ / ✓ |
 
 ## Logs / diagnóstico
 
