@@ -23,6 +23,9 @@ const CATEGORIES: { name: string; slug: string; parent?: string }[] = [
   { name: 'Esportes e Fitness', slug: 'esportes-e-fitness' },
   { name: 'Academia', slug: 'academia', parent: 'esportes-e-fitness' },
   { name: 'Ferramentas', slug: 'ferramentas' },
+  // Categoria de teste (Pix). Para remover: apague estas 2 entradas
+  // (categoria abaixo + produto em PRODUCTS) e rode `pnpm seed`.
+  { name: 'Teste', slug: 'teste' },
 ]
 
 type SeedVariant = { attributes: Record<string, string>; stock: number }
@@ -65,6 +68,11 @@ const PRODUCTS: SeedProduct[] = [
   { title: 'Tapete de Yoga 6mm Antiderrapante', brand: 'Genérico', cat: 'academia', price: 7900, rating: 4.7, rc: 1560, sold: 11200, imgs: 3, desc: 'Tapete de yoga de 6mm dupla face antiderrapante com straps de transporte.', variants: [v({ Cor: 'Azul' }, 70), v({ Cor: 'Roxo' }, 45), v({ Cor: 'Preto' }, 60)] },
   { title: 'Parafusadeira Bosch Go 3,6V Com Bits Automáticos', brand: 'Bosch', cat: 'ferramentas', price: 32900, rating: 4.8, rc: 2210, sold: 6800, imgs: 4, desc: 'Parafusadeira elétrica com bits automáticos, torque eletrônico e case.', variants: [v({}, 26)] },
   { title: 'Kit Chaves de Fenda Tramontina 6 Peças', brand: 'Tramontina', cat: 'ferramentas', price: 5900, rating: 4.7, rc: 980, sold: 5200, imgs: 3, desc: 'Kit com 6 chaves de fenda e phillips em aço cromo vanádio com cabo emborrachado.', variants: [v({}, 48)] },
+  // Produto de teste Pix (R$ 10,00) — para remover: apague esta entrada e a categoria
+  // "Teste" acima e rode `pnpm seed`; ou delete direto no banco:
+  //   DELETE FROM "Product" WHERE slug = 'produto-de-teste-pix';
+  //   DELETE FROM "Category" WHERE slug = 'teste';
+  { title: 'Produto de teste Pix', brand: 'Teste', cat: 'teste', price: 1000, free: true, rating: 5, rc: 0, sold: 0, imgs: 1, desc: 'Produto exclusivo para testar o fluxo de pagamento Pix com o menor valor possível.', variants: [v({}, 5)] },
 ]
 
 async function main() {

@@ -198,10 +198,14 @@ describe('POST /payments — criação', () => {
 
     const sent = createTransaction.mock.calls[0][0]
     expect(sent.amount).toBe(15000) // total do banco, não do cliente
-    expect(sent.externalRef).toBe(orderCode)
+    // vínculo pedido↔transação vai em metadata (API real rejeita externalRef raiz)
+    expect(sent.metadata).toContain(orderCode)
+    expect(JSON.parse(sent.metadata)).toEqual({ orderCode })
     expect(sent.currency).toBe('BRL')
     expect(sent.paymentMethod).toBe('PIX')
-    expect(sent.customer.document).toEqual({ number: '529.982.247-25', type: 'CPF' })
+    // CPF e telefone SÓ com dígitos (validação real do provedor)
+    expect(sent.customer.document).toEqual({ number: '52998224725', type: 'CPF' })
+    expect(sent.customer.phone).toBe('11987654321')
     expect(sent.shipping.fee).toBe(0)
     expect(sent.items[0]).toMatchObject({ unitPrice: 15000, quantity: 1, tangible: true })
 

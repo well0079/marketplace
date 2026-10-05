@@ -81,3 +81,11 @@ Registro das decisões que NÃO são óbvias pelo código. Datas em 2026.
 - Migration escrita à mão (`payment_pix_fields`) com `migrate deploy`: o `migrate dev` recusa
   ambiente não-interativo quando há warnings (unique em coluna nullable); SQL idêntico ao do
   Prisma.
+### Descobertas do teste real (FASE 11, 05/10/2026)
+- `externalRef` raiz → 400 whitelist; vínculo via `metadata` (JSON string). Conferência de
+  identidade no webhook/sync aceita `externalRef` OU `metadata.orderCode`.
+- CPF/telefone enviados só com dígitos (mascarados dos examples não são exigidos).
+- Valor mínimo prático = acima da taxa do gateway (R$ 1,00 recusado com "O valor das taxas é
+  igual ou superior ao valor da transação"); produto de teste do seed = R$ 10,00.
+- `pix.qrcode` real = EMV copia e cola (example da doc era base64 PNG ilustrativo).
+- Log do 502 inclui status HTTP + mensagem do provedor com sequências de 5+ dígitos mascaradas.

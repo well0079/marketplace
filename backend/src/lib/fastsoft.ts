@@ -10,6 +10,7 @@ export class FastSoftError extends Error {
   constructor(
     message: string,
     public readonly status: number,
+    public readonly providerMessage?: string,
   ) {
     super(message)
   }
@@ -22,6 +23,7 @@ export type FastSoftTransaction = {
   amount: number
   status: string
   externalRef?: string | null
+  metadata?: string | null
   paidAt?: string | null
   createdAt?: string | null
   paymentMethod?: string | null
@@ -52,8 +54,20 @@ async function request(path: string, init: { method: 'GET' | 'POST'; body?: unkn
       signal: controller.signal,
     })
     if (!res.ok) {
-      // mensagem genérica + status: nunca o corpo (pode conter dados do pagador)
-      throw new FastSoftError(`FastSoft respondeu ${res.status}`, res.status)
+      // A doc mostra { message, statusCode } nos erros de autenticação, mas o corpo
+      // de validação pode ter outra forma. Preservamos um TRECHO sanitizado (dígitos
+      // de 5+ casas mascarados — CPF/telefone nunca aparecem) para diagnóstico;
+      // o payload enviado nunca é logado.
+      const raw = await res.text().catch(() => '')
+      let providerMessage = raw
+      try {
+        const parsed = JSON.parse(raw) as unknown
+        providerMessage = typeof parsed === 'string' ? parsed : JSON.stringify(parsed)
+      } catch {
+        /* corpo não-JSON: usa o texto bruto */
+      }
+      const sanitized = providerMessage.replace(/\d{5,}/g, '***').slice(0, 500)
+      throw new FastSoftError(`FastSoft respondeu ${res.status}`, res.status, sanitized || undefined)
     }
     const payload = (await res.json().catch(() => null)) as { data?: FastSoftTransaction } | null
     if (!payload?.data?.id) {
@@ -76,7 +90,9 @@ export type CreateTransactionInput = {
   shipping: { fee: number; address: Record<string, string> }
   items: { title: string; unitPrice: number; quantity: number; tangible: boolean; externalRef: string }[]
   pix: { expiresInDays: number }
-  externalRef: string
+  // string JSON (formato da doc): carrega o código do pedido — a API real rejeita
+  // "externalRef" no nível raiz (400 whitelist)
+  metadata: string
   traceable: boolean
   ip: string
   postbackUrl?: string

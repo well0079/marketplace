@@ -1,6 +1,6 @@
 import { prisma } from '../lib/prisma'
 import { ApiError } from '../lib/errors'
-import { formatCpf, formatPhone, formatZipCode, isValidCpf, maskCpf, onlyDigits } from '../lib/cpf'
+import { formatZipCode, isValidCpf, maskCpf, onlyDigits } from '../lib/cpf'
 import * as fastsoft from '../lib/fastsoft'
 
 // Pagamentos Pix via FastSoft: criação idempotente, sincronização com o provedor
@@ -26,6 +26,12 @@ const ALLOWED_TRANSITIONS: Record<string, string[]> = {
 // A doc mistura minúsculo/maiúsculo ("paid" no webhook, "PAID" na consulta)
 export function normalizeStatus(raw: unknown): string {
   return String(raw ?? '').trim().toUpperCase()
+}
+
+// Mensagem do provedor para o log: mascara qualquer sequência de 5+ dígitos
+// (CPF/telefone nunca aparecem inteiros em log)
+function sanitizeProviderMessage(message: string): string {
+  return message.replace(/\d{5,}/g, '***').slice(0, 1000)
 }
 
 export type PaymentPayload = {
@@ -136,8 +142,10 @@ export async function createPayment(
       customer: {
         name: input.payer.name,
         email: input.user.email,
-        document: { number: formatCpf(input.payer.document), type: 'CPF' },
-        phone: formatPhone(input.payer.phone),
+        // CPF e telefone SÓ com dígitos (ajuste pós-teste real; a validação do
+        // provedor rejeitou os valores formatados dos examples)
+        document: { number: input.payer.document, type: 'CPF' },
+        phone: input.payer.phone,
       },
       shipping: {
         fee: order.shippingCost,
@@ -160,14 +168,22 @@ export async function createPayment(
         externalRef: item.variantId,
       })),
       pix: { expiresInDays: PIX_EXPIRES_IN_DAYS },
-      externalRef: order.code,
+      // A API real REJEITA externalRef no nível raiz (400 "property externalRef
+      // should not exist" — validation pipe com whitelist); o vínculo pedido↔
+      // transação vai em metadata (string JSON, como no example da doc)
+      metadata: JSON.stringify({ orderCode: order.code }),
       traceable: true,
       ip: input.ip,
       ...(postbackUrl ? { postbackUrl } : {}),
     })
     .catch((error) => {
-      // NÃO vazar detalhes do provedor; a chave/payload nunca vão para o log
-      console.error(`[fastsoft] falha ao criar transação do pedido ${order.code}: status ${(error as fastsoft.FastSoftError).status ?? '?'}`)
+      // Log com status HTTP e mensagem do provedor (mascarada) para diagnóstico;
+      // a chave e o payload NUNCA vão para o log. Frontend recebe 502 genérico.
+      const fsError = error as fastsoft.FastSoftError
+      const detail = fsError.providerMessage
+        ? sanitizeProviderMessage(fsError.providerMessage)
+        : 'provedor sem detalhes'
+      console.error(`[fastsoft] falha ao criar transação do pedido ${order.code}: HTTP ${fsError.status ?? '?'} — ${detail}`)
       throw new ApiError(502, 'PAYMENT_PROVIDER_ERROR', 'Não foi possível iniciar o pagamento agora. Tente novamente em instantes.')
     })
 
@@ -242,8 +258,17 @@ export async function syncPaymentFromProvider(paymentId: string): Promise<void> 
     await prisma.payment.update({ where: { id: payment.id }, data: { lastSyncedAt: new Date() } })
     return
   }
-  if (transaction.externalRef && transaction.externalRef !== payment.order.code) {
-    console.error(`[fastsoft] divergência de externalRef no pagamento ${payment.id}: ignorado`)
+  // Identidade da transação: externalRef OU metadata.orderCode (a API real não
+  // devolve externalRef raiz porque não a enviamos)
+  let metadataOrderCode: string | undefined
+  try {
+    metadataOrderCode = (JSON.parse(String(transaction.metadata ?? '{}')) as { orderCode?: string }).orderCode
+  } catch {
+    /* metadata não-JSON: ignora */
+  }
+  const ref = transaction.externalRef ?? metadataOrderCode
+  if (ref && ref !== payment.order.code) {
+    console.error(`[fastsoft] divergência de referência no pagamento ${payment.id}: ignorado`)
     await prisma.payment.update({ where: { id: payment.id }, data: { lastSyncedAt: new Date() } })
     return
   }

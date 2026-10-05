@@ -14,7 +14,7 @@ Client isolado em `backend/src/lib/fastsoft.ts` — o frontend NUNCA fala com o 
 | Campos do request | `amount` (obrigatório), `currency` ("BRL"), `paymentMethod` ("PIX"), `customer{name,email,phone,document{number,type}}`, `shipping{fee,address{street,streetNumber,complement,zipCode,neighborhood,city,state,country}}`, `items[{title,unitPrice,quantity,tangible,externalRef}]` (obrigatório), `pix{expiresInDays}`, `postbackUrl`, `metadata`, `traceable`, `ip`, `externalRef`, `card`/`installments` (cartão), `boleto`, `subMerchant` | página Criar Transação (Request; o exemplo tem o typo "externaRef" no customer — usamos `externalRef` do schema) |
 | Obter transação | `GET /api/user/transactions/:id` (id UUID) | api/user-transaction-controller-get-transaction |
 | Response (200) | `{ data: {id, amount, status, externalRef, paidAt, paymentMethod, pix{qrcode, url, expirationDate}, refusedReason, items, customer, shipping, ...}, status, message, error }` (lido na aba **Example (auto)** de Obter/Criar Transação — o schema da aba "Schema" mostra `data` como objeto opaco) | idem |
-| `pix.qrcode` | No **example da doc** vem **base64 de imagem PNG** (`iVBORw0KGgo...`), junto de `pix.url` (URL de imagem) — NÃO é declarado explicitamente se pode vir como string EMV copia-e-cola. O frontend trata os três formatos (imagem base64, URL, texto→QR renderizado com `react-qr-code`) | Example (auto), Obter/Criar Transação |
+| `pix.qrcode` | No **example da doc** é base64 de imagem PNG; **na prática (transação real de teste, 05/10/2026) vem como string EMV copia-e-cola** (`00020101...br.gov.bcb.pix...`). O frontend trata os três formatos (base64, URL, texto→QR local com `react-qr-code`) | Example (auto) + teste real |
 | Webhook | `POST` no `postbackUrl` (SÓ HTTPS público) com `{ type: "transaction", objectId, url, data: {id, status, amount, externalRef, pix{qrcode, expirationDate}, paidAt, ...} }` | webhook/transaction |
 | Assinatura do webhook | **Não documentada** (a página não menciona HMAC/secret) | webhook/transaction |
 | Reembolso | `POST /api/user/transactions/:id/refund` (só de PAID) — FORA DO ESCOPO desta fase | api/user-transaction-controller-refund-transaction |
@@ -70,6 +70,23 @@ PAID→REFUNDED/IN_PROTEST/CHARGEDBACK · IN_PROTEST→REFUNDED/CHARGEDBACK.
 - Assinatura/verificação criptográfica de webhook (a FastSoft não documenta nenhuma).
 - Compensação de `REFUNDED`/`CHARGEDBACK` no pedido (hoje só muda o Payment).
 - Envio de e-mail/notificação na confirmação.
+
+## Descobertas do teste real (05/10/2026 — transações de R$ 1,00/R$ 10,00, nenhuma paga)
+
+1. **`externalRef` no nível RAIZ do payload é rejeitado**: HTTP 400
+   `{"message":["property externalRef should not exist"]}` (validation pipe com whitelist).
+   O vínculo pedido↔transação vai em `metadata` (string JSON `{"orderCode":"RD-..."})`; os
+   `items[].externalRef` e `customer.externalRef` são aceitos.
+2. **CPF e telefone SÓ com dígitos** (`52998224725`, `11987654321`) — os formatos mascarados dos
+   examples (`000.000.000-00`, `(11) 98765-4321`) não são exigência da API.
+3. **Valor mínimo prático**: transação com valor igual/inferior à taxa do gateway é RECUSADA com
+   HTTP 400 `{"message":"Transação recusada...","error":{"refusedReason":"...O valor das taxas é
+   igual ou superior ao valor da transação."}}`. R$ 1,00 não funciona; o produto de teste do seed
+   usa R$ 10,00.
+4. **`pix.qrcode` real = EMV copia e cola** (ver item da tabela acima) — o frontend renderiza QR
+   local e oferece "Copiar código Pix".
+5. Erros HTTP 400 de recusa chegam com `data.id`/`data.status: "refused"` — a transação É criada
+   no provedor em estado refused (não há cobrança).
 
 ## Riscos conhecidos
 

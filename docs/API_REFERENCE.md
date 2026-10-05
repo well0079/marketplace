@@ -41,7 +41,8 @@ Valores monetários em **centavos** (INTEGER) · Erros: `{ error: { code, messag
 ## Pedidos (sessão obrigatória)
 - `POST /orders` — headers: `Idempotency-Key` (obrigatória, 400 se ausente)
   body: `{ addressId, deliveryOption: "standard" | "express" }` (valores de preço/total no body são
-  IGNORADOS)
+  IGNORADOS). Nota FastSoft: o vínculo pedido↔transação vai em `metadata` (JSON) — a API real
+  rejeita `externalRef` raiz; CPF/telefone do pagador são enviados só com dígitos.
   → 201 pedido criado / 200 pedido original (mesma key + mesmo usuário) ·
   `{ code, status: "pending", paymentPending: true, subtotal, shippingCost, discount, total,
      deliveryOption: { id, label, description, region, price }, shippingAddress: {...snapshot},
