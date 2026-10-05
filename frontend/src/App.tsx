@@ -1,7 +1,8 @@
-import { Route, Routes } from 'react-router-dom'
+import { Route, Routes, useLocation } from 'react-router-dom'
 import { CategoryStub } from './pages/stubs'
 import { NotFound } from './pages/NotFound'
 import { DesignSystemShowcase } from './pages/DesignSystemShowcase'
+import { DesignIngressosShowcase } from './pages/DesignIngressosShowcase'
 import { Header } from './components/layout/Header'
 import { Home } from './pages/Home'
 import { Search } from './pages/Search'
@@ -16,13 +17,20 @@ import { OrderDetail } from './pages/OrderDetail'
 import { PixPayment } from './pages/PixPayment'
 import { CheckoutSuccess } from './pages/CheckoutSuccess'
 
+// O showcase do tema ingressos tem header próprio — o Header global fica fora dessa rota
+function HeaderGate() {
+  const { pathname } = useLocation()
+  return pathname.startsWith('/design-ingressos') ? null : <Header />
+}
+
 export function App() {
   return (
     <>
-      <Header />
+      <HeaderGate />
       <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/design" element={<DesignSystemShowcase />} />
+      <Route path="/design-ingressos" element={<DesignIngressosShowcase />} />
       <Route path="/search" element={<Search />} />
       <Route path="/c/:slug" element={<CategoryStub />} />
       <Route path="/product/:slug" element={<Product />} />
