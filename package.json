@@ -2,7 +2,7 @@
   "name": "marketplace",
   "private": true,
   "version": "0.2.0",
-  "engines": { "node": ">=20" },
+  "engines": { "node": "22.x" },
   "scripts": {
     "setup": "pnpm install && pnpm db:up && pnpm migrate && pnpm seed",
     "dev": "concurrently -n api,web -c blue,green \"pnpm dev:backend\" \"pnpm dev:frontend\"",
