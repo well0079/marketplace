@@ -10,7 +10,10 @@ export async function getHealth(_req: Request, res: Response) {
   try {
     await prisma.$queryRaw`SELECT 1`
     res.json({ status: 'ok', database: 'up' })
-  } catch {
+  } catch (err) {
+    // log do código do erro (P1001 = inacessível, P1000/P1002 = credenciais/host) —
+    // sem mensagem para não vazar nada da connection string
+    console.error('[health] DATABASE_DOWN code=' + ((err as { code?: string }).code ?? '?'))
     res.status(503).json({ error: { code: 'DATABASE_DOWN', message: 'Banco de dados indisponível' } })
   }
 }
