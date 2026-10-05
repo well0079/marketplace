@@ -38,6 +38,21 @@ Ordem das seções:
   (mesmos padrões da Home). Nenhuma URL de categoria foi exposta como link público na Home
   auditada (os tiles são o caminho).
 
+## Página de sessão (/event/:slug/session/:id, 1366px — auditada 05/10)
+1. Header global (igual às outras telas)
+2. **Hero desfocado** em largura total com **card pequeno da imagem** centralizado (radius card, sombra)
+3. **Título** centralizado (display) + **organizador com ícone** 🏢 + **data completa com ícone** 📅
+4. **Pills outlined** (ex.: "Destaque", categoria)
+5. **Banner outlined "Não perca nenhuma novidade"** — ícone em quadrado roxo, texto + subtítulo, seta à direita
+   (no projeto: link por `VITE_COMMUNITY_URL`; **escondido quando a env está vazia** — padrão)
+6. **Card "Selecione o ingresso"**: título + dois selects empilhados ("Tipo de Ingresso", "Categoria" —
+   no auditado: ComboBox com chevron; medimos `R$ 80 · menor preço | Comprar` como PriceActionButton
+   e "Vender" como botão preto separado, mesma fileira) · no projeto: selects do DS + lista de
+   **OfferRow** por menor preço primeiro + botão preto "Vender" sempre visível
+7. **LinkCard "Guia de transferência"** (72px, tile de ícone 44px, seta)
+8. **Card "Descrição"** com seções de ícone-emoji
+Screenshots: `.reference/sessao-1366.png` (referência) e `.reference/meu-evento-390.png` (nosso, 390px).
+
 ## Fluxo de compra / conta
 **Pendente: aguardando prints do usuário** (exige login e checkout real):
 - Seleção de ingressos (setores/lotes) · carrinho · pagamento · confirmação · "Meus pedidos" ·

@@ -4,7 +4,6 @@ import { getSessionUser } from '../lib/auth'
 import { toInt } from '../lib/params'
 import * as events from '../services/events.service'
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 // ─── Público: eventos, sessões e ofertas ───
 

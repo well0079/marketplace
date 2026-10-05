@@ -215,6 +215,7 @@ export async function getSessionDetail(sessionId: string) {
       name: event.name,
       category: event.category,
       organizer: event.organizer,
+      description: event.description,
       imageUrl: event.imageUrl,
     },
     types: toList(byType),

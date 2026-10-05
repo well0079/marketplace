@@ -16,6 +16,8 @@ import { Orders } from './pages/Orders'
 import { OrderDetail } from './pages/OrderDetail'
 import { PixPayment } from './pages/PixPayment'
 import { CheckoutSuccess } from './pages/CheckoutSuccess'
+import { EventPage } from './pages/EventPage'
+import { EventSessionPage } from './pages/EventSessionPage'
 
 // O showcase do tema ingressos tem header próprio — o Header global fica fora dessa rota
 function HeaderGate() {
@@ -33,6 +35,8 @@ export function App() {
       <Route path="/design-ingressos" element={<DesignIngressosShowcase />} />
       <Route path="/search" element={<Search />} />
       <Route path="/c/:slug" element={<CategoryStub />} />
+      <Route path="/event/:slug" element={<EventPage />} />
+      <Route path="/event/:slug/session/:id" element={<EventSessionPage />} />
       <Route path="/product/:slug" element={<Product />} />
       <Route path="/cart" element={<Cart />} />
       <Route path="/login" element={<Login />} />
