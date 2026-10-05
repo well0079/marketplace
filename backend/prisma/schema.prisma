@@ -25,6 +25,8 @@ model User {
   favorites Favorite[]
   reviews   Review[]
   questions Question[]
+  offers        Offer[]
+  reservations  Reservation[]
 }
 
 model Address {
@@ -141,12 +143,15 @@ model Order {
   shippingCost    Int       @default(0)
   discount        Int       @default(0)
   total           Int
-  shippingAddress Json
+  shippingAddress Json?
   deliveryOption  Json?
   idempotencyKey  String    @unique
   expiresAt       DateTime?
   cancelledAt     DateTime?
   needsReview     Boolean   @default(false)
+  // Pedidos de ingresso (fluxo reserva): snapshot completo; cart/orders de produto deixam nulos
+  ticketSnapshot  Json?
+  reservationId   String?   @db.Uuid
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   user     User        @relation(fields: [userId], references: [id])
@@ -158,14 +163,15 @@ model Order {
 model OrderItem {
   id              String   @id @default(uuid()) @db.Uuid
   orderId         String   @db.Uuid
-  variantId       String   @db.Uuid
+  // nulo em pedidos de ingresso (snapshot vive em Order.ticketSnapshot)
+  variantId       String?  @db.Uuid
   productSnapshot Json
   unitPrice       Int
   quantity        Int
   lineTotal       Int
   createdAt       DateTime @default(now())
   order   Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  variant ProductVariant @relation(fields: [variantId], references: [id])
+  variant ProductVariant? @relation(fields: [variantId], references: [id])
   @@index([orderId])
 }
 
@@ -240,4 +246,67 @@ model Question {
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@index([productId, createdAt(sort: Desc)])
+}
+
+// ═══ Tema ingressos (ETAPA 2+3, bloco 1) ═══
+
+// Regras: disponível = quantity - soma de reservas ativas não expiradas;
+// a oferta só perde estoque (quantity) na confirmação do pagamento.
+model Event {
+  id          String   @id @default(uuid()) @db.Uuid
+  slug        String   @unique
+  name        String
+  category    String
+  organizer   String
+  description String
+  // placeholder: nulo = gradiente por categoria no frontend (nada é copiado do site de referência)
+  imageUrl    String?
+  featured    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  sessions EventSession[]
+  @@index([featured, createdAt])
+}
+
+model EventSession {
+  id       String   @id @default(uuid()) @db.Uuid
+  eventId  String   @db.Uuid
+  startsAt DateTime
+  city     String
+  uf       String
+  venue    String
+  event   Event   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  offers  Offer[]
+  @@index([eventId, startsAt])
+}
+
+// ticketType = área (Pista, Área VIP, Camarote); ticketCategory = modalidade (Inteira, Meia, Solidário)
+// sellerId nulo = venda pela plataforma
+model Offer {
+  id             String   @id @default(uuid()) @db.Uuid
+  sessionId      String   @db.Uuid
+  ticketType     String
+  ticketCategory String
+  priceCents     Int
+  quantity       Int
+  sellerId       String?  @db.Uuid
+  status         String   @default("active") // active | sold | cancelled
+  createdAt      DateTime @default(now())
+  session      EventSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  seller       User?         @relation(fields: [sellerId], references: [id], onDelete: SetNull)
+  reservations Reservation[]
+  @@index([sessionId, status, priceCents])
+}
+
+model Reservation {
+  id        String   @id @default(uuid()) @db.Uuid
+  offerId   String   @db.Uuid
+  userId    String   @db.Uuid
+  quantity  Int
+  expiresAt DateTime
+  status    String   @default("active") // active | expired | cancelled | converted
+  createdAt DateTime @default(now())
+  offer Offer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([offerId, status, expiresAt])
+  @@index([userId, status, expiresAt])
 }

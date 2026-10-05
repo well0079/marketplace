@@ -124,7 +124,7 @@ beforeAll(async () => {
   const user = await prisma.user.findUnique({ where: { email: USER.email } })
   const order = await createOrderFor(user!.id)
   orderCode = order.code
-  orderVariantId = (await prisma.orderItem.findFirst({ where: { orderId: order.id } }))!.variantId
+  orderVariantId = (await prisma.orderItem.findFirst({ where: { orderId: order.id } }))!.variantId as string
 
   const cancelled = await createOrderFor(user!.id, false)
   await prisma.order.update({ where: { id: cancelled.id }, data: { status: 'cancelled' } })
@@ -391,7 +391,7 @@ describe('Webhook + sincronização', () => {
     const order3 = await createOrderFor(user!.id)
     const item = await prisma.orderItem.findFirst({ where: { orderId: order3.id } })
     // zera o estoque da variante após o pedido (corrida entre pedido e pagamento)
-    await prisma.productVariant.update({ where: { id: item!.variantId }, data: { stock: 0 } })
+    await prisma.productVariant.update({ where: { id: item!.variantId as string }, data: { stock: 0 } })
 
     createTransaction.mockResolvedValue({ ...FASTSOFT_CREATED, id: `tx-${suffix}-c`, amount: 15000, externalRef: order3.code })
     const pay = await request(app)
@@ -409,7 +409,7 @@ describe('Webhook + sincronização', () => {
     expect(order?.status).toBe('paid')
     expect(order?.needsReview).toBe(true)
     expect((await prisma.payment.findUnique({ where: { id: pay.body.paymentId } }))?.status).toBe('PAID')
-    expect((await prisma.productVariant.findUnique({ where: { id: item!.variantId } }))!.stock).toBe(0)
+    expect((await prisma.productVariant.findUnique({ where: { id: item!.variantId as string } }))!.stock).toBe(0)
   })
 
   it('consulta à FastSoft falhando → 5xx para a FastSoft reenviar', async () => {

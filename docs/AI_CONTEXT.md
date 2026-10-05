@@ -3,7 +3,8 @@ Objetivo: marketplace estilo Mercado Livre (pt-BR/BRL), competição com prazo c
 Stack: React+Vite+TS+Tailwind3 | Express+TS+Prisma5+Postgres16 | pnpm monorepo.
 Regras: dinheiro em centavos; FastSoft só na fase final e server-side; nunca simular
 pagamento; nunca copiar código/ativos do ML; não trocar a stack.
-Fase atual: 11 (pagamento Pix FastSoft) concluída. Próximas: 12+ pós-pagamento (REFUNDED, notificações); FastSoft server-side OK.
+Fase atual: branch `ingressos` — ETAPA 2+3 bloco 1 concluído (modelo+API de eventos,
+sessões, ofertas e reservas; pedido por reserva com taxa 10%). Blocos 2–5 pendentes.
 API: GET /api/v1/health · /products (q,page,limit,sort,category) · /products/:slug · /categories
 · /cart (+ /cart/items CRUD) · /auth/register|login|logout|me · /addresses (GET,POST,DELETE /:id)
 · /shipping/options?zipCode= (citação de frete pelo carrinho do cookie)
@@ -249,3 +250,25 @@ Convenções:
   devolvido e atrapalha quem reusa o pedido).
 - Cobrança real: PROIBIDA sem autorização explícita do usuário (sem sandbox!). Validação no
   navegador foi feita com FASTSOFT_SECRET_KEY="" no processo do dev server.
+
+## BRANCH `ingressos` — ETAPA 2+3, BLOCO 1 (tema ingressos)
+- Modelos novos: Event → EventSession → Offer (ticketType=área, ticketCategory=modalidade,
+  sellerId nulo=plataforma, quantity) → Reservation (TTL 10 min avaliado por timestamp — sem cron).
+  Disponível = quantity − reservas ativas não expiradas.
+- **Reserva com lock**: `SELECT ... FOR UPDATE` na oferta dentro de $transaction (com cast
+  `::uuid` — $queryRaw manda text e `uuid = text` quebra!). offerId não-uuid → 404 (sem tocar o banco).
+- POST /orders com DOIS fluxos: `{addressId, deliveryOption}` (carrinho, inalterado) ou
+  `{reservationId, receiptEmail?}` → ticketSnapshot JSONB (evento/sessão/tipo/categoria/
+  organizador/preços/taxa/total/receiptEmail). **Taxa de serviço = 10% ARREDONDADA
+  (Math.round) — SERVICE_FEE_RATE em order.service**. Order: shippingAddress agora Json? ;
+  OrderItem.variantId agora String? ; Order + ticketSnapshot/reservationId.
+- PAID no payment.service: branch por ticketSnapshot — reserva ativa → converted + decremento
+  da oferta; reserva expirada → valida disponibilidade agora, baixa se couber, senão
+  paid+needsReview. Itens sem variantId são pulados no fluxo de produto.
+- FastSoft para pedido de ingresso: items[].externalRef = offerId (variantId é null);
+  shipping address com `?.` (shippingAddress nulo em ticket).
+- Seed reescrito: 12 eventos FICTÍCIOS (Time Azul x Time Verde etc.), 17 sessões, 75 ofertas
+  (sessões sem oferta → Indisponível; "Evento de teste Pix" R$ 1 mantido como EVENTO).
+  Produtos físicos NÃO são mais semeados (deletes mantidos). api.test.ts agora cria fixture própria.
+- Limpeza do seed: `pnpm seed` (destrutivo) ou DELETE na ordem Reservation → Offer →
+  EventSession → Event. Ver comentário no topo do seed.ts.

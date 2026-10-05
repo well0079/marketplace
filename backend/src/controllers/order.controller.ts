@@ -16,6 +16,16 @@ export async function createOrder(req: Request, res: Response) {
     throw new ApiError(400, 'VALIDATION', 'Header Idempotency-Key é obrigatório.')
   }
 
+  // Fluxo de INGRESSO: body { reservationId, receiptEmail? } → pedido a partir da reserva
+  const reservationId = typeof req.body?.reservationId === 'string' ? req.body.reservationId.trim() : ''
+  if (reservationId) {
+    const receiptEmailRaw = typeof req.body?.receiptEmail === 'string' ? req.body.receiptEmail.trim().toLowerCase() : ''
+    const receiptEmail = receiptEmailRaw === '' ? null : receiptEmailRaw
+    const { order, created } = await orders.createTicketOrder({ userId: user.id, reservationId, receiptEmail, idempotencyKey })
+    res.status(created ? 201 : 200).json(order)
+    return
+  }
+
   const addressId = typeof req.body?.addressId === 'string' ? req.body.addressId : ''
   const deliveryOption = typeof req.body?.deliveryOption === 'string' ? req.body.deliveryOption : ''
   if (!addressId) throw new ApiError(400, 'VALIDATION', 'Escolha um endereço de entrega.', { addressId: 'Obrigatório.' })

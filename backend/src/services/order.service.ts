@@ -8,10 +8,10 @@ import { shippingQuote } from './shipping.service'
 // snapshot de itens/endereço/entrega. Totais SEMPRE recalculados no servidor.
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // sem I/O/0/1 (legibilidade)
 
-export type OrderStatus = 'pending' | 'cancelled'
+export type OrderStatus = 'pending' | 'paid' | 'cancelled'
 
 export type OrderItemSnapshot = {
-  variantId: string
+  variantId: string | null
   productId: string
   slug: string
   title: string
@@ -20,6 +20,29 @@ export type OrderItemSnapshot = {
   unitPrice: number
   quantity: number
   lineTotal: number
+}
+
+// Snapshot do pedido de ingresso (Order.ticketSnapshot). Regra de negócio: a taxa
+// de serviço é 10% do preço do ingresso, ARREDONDADA para o centavo (Math.round).
+export type TicketOrderSnapshot = {
+  kind: 'ticket'
+  offerId: string
+  reservationId: string
+  event: { id: string; slug: string; name: string; category: string; organizer: string; imageUrl: string | null }
+  session: { id: string; startsAt: string; city: string; uf: string; venue: string }
+  ticketType: string
+  ticketCategory: string
+  unitPriceCents: number
+  quantity: number
+  serviceFeeCents: number
+  totalCents: number
+  receiptEmail: string | null
+}
+
+export const SERVICE_FEE_RATE = 0.1
+
+export function serviceFeeFor(priceCents: number): number {
+  return Math.round(priceCents * SERVICE_FEE_RATE)
 }
 
 export type OrderDetailPayload = {
@@ -31,7 +54,8 @@ export type OrderDetailPayload = {
   discount: number
   total: number
   deliveryOption: { id: string; label: string; description: string; region: string; price: number } | null
-  shippingAddress: Record<string, string>
+  shippingAddress: Record<string, string> | null
+  ticketSnapshot: Record<string, unknown> | null
   items: OrderItemSnapshot[]
   createdAt: string
   cancelledAt: string | null
@@ -66,16 +90,31 @@ function toDetailPayload(order: OrderWithItems): OrderDetailPayload {
     discount: order.discount,
     total: order.total,
     deliveryOption: delivery,
-    shippingAddress: order.shippingAddress as Record<string, string>,
-    items: order.items.map((item) => {
-      const snapshot = item.productSnapshot as Omit<OrderItemSnapshot, 'variantId' | 'unitPrice' | 'quantity' | 'lineTotal'>
+    shippingAddress: (order.shippingAddress ?? null) as Record<string, string> | null,
+    ticketSnapshot: (order.ticketSnapshot ?? null) as Record<string, unknown> | null,
+    items: order.items.map((item): OrderItemSnapshot => {
+      const snapshot = item.productSnapshot as Record<string, unknown>
+      // Item de ingresso (sem variante): o snapshot completo vive em ticketSnapshot
+      if (item.variantId === null) {
+        return {
+          variantId: null,
+          productId: (snapshot.productId as string) ?? '',
+          slug: (snapshot.slug as string) ?? '',
+          title: (snapshot.title as string) ?? '',
+          thumbnail: (snapshot.thumbnail as string | null) ?? null,
+          attributes: (snapshot.attributes as Record<string, string>) ?? {},
+          unitPrice: item.unitPrice,
+          quantity: item.quantity,
+          lineTotal: item.lineTotal,
+        }
+      }
       return {
         variantId: item.variantId,
-        productId: snapshot.productId,
-        slug: snapshot.slug,
-        title: snapshot.title,
-        thumbnail: snapshot.thumbnail,
-        attributes: snapshot.attributes,
+        productId: snapshot.productId as string,
+        slug: snapshot.slug as string,
+        title: snapshot.title as string,
+        thumbnail: (snapshot.thumbnail as string | null) ?? null,
+        attributes: snapshot.attributes as Record<string, string>,
         unitPrice: item.unitPrice,
         quantity: item.quantity,
         lineTotal: item.lineTotal,
@@ -290,4 +329,115 @@ export async function cancelOrder(userId: string, code: string): Promise<OrderDe
     include: { items: { orderBy: { createdAt: 'asc' } } },
   })
   return toDetailPayload(cancelled)
+}
+
+// ─── Pedido de ingresso a partir da reserva (tema ingressos, ETAPA 2+3 bloco 1) ───
+
+export type CreateTicketOrderInput = {
+  userId: string
+  reservationId: string
+  receiptEmail: string | null
+  idempotencyKey: string
+}
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+export async function createTicketOrder(
+  input: CreateTicketOrderInput,
+): Promise<{ order: OrderDetailPayload; created: boolean }> {
+  // Idempotência idêntica à do carrinho: mesma key + mesmo usuário devolve o
+  // pedido original (a unique é global no schema; key de outro usuário = 409)
+  const existing = await prisma.order.findUnique({ where: { idempotencyKey: input.idempotencyKey }, include: { items: true } })
+  if (existing) {
+    if (existing.userId !== input.userId) {
+      throw new ApiError(409, 'IDEMPOTENCY_CONFLICT', 'Esta chave de idempotência já está em uso.')
+    }
+    return { order: toDetailPayload(existing), created: false }
+  }
+
+  if (input.receiptEmail !== null && !EMAIL_PATTERN.test(input.receiptEmail)) {
+    throw new ApiError(400, 'VALIDATION', 'E-mail de recebimento inválido.', { receiptEmail: 'Informe um e-mail válido.' })
+  }
+
+  const reservation = await prisma.reservation.findUnique({
+    where: { id: input.reservationId },
+    include: {
+      offer: {
+        include: {
+          session: { include: { event: true } },
+        },
+      },
+    },
+  })
+  // Mesmo contrato de endereço/pedido: recurso de outro usuário = 404
+  if (!reservation || reservation.userId !== input.userId) {
+    throw new ApiError(404, 'NOT_FOUND', 'Reserva não encontrada')
+  }
+  if (reservation.status !== 'active' || reservation.expiresAt <= new Date()) {
+    throw new ApiError(422, 'RESERVATION_EXPIRED', 'Sua reserva expirou. Volte ao evento e selecione o ingresso novamente.')
+  }
+  if (reservation.offer.status !== 'active') {
+    throw new ApiError(422, 'OFFER_UNAVAILABLE', 'Esta oferta não está mais disponível.')
+  }
+
+  const offer = reservation.offer
+  const session = offer.session
+  const event = session.event
+  const unitPrice = offer.priceCents // SEMPRE do banco — valor enviado pelo cliente é ignorado
+  const quantity = reservation.quantity
+  const serviceFeeCents = serviceFeeFor(unitPrice) // 10% arredondado ao centavo (por ingresso)
+  const subtotal = unitPrice * quantity
+  const total = subtotal + serviceFeeCents * quantity
+
+  const ticketSnapshot: TicketOrderSnapshot = {
+    kind: 'ticket',
+    offerId: offer.id,
+    reservationId: reservation.id,
+    event: { id: event.id, slug: event.slug, name: event.name, category: event.category, organizer: event.organizer, imageUrl: event.imageUrl },
+    session: { id: session.id, startsAt: session.startsAt.toISOString(), city: session.city, uf: session.uf, venue: session.venue },
+    ticketType: offer.ticketType,
+    ticketCategory: offer.ticketCategory,
+    unitPriceCents: unitPrice,
+    quantity,
+    serviceFeeCents,
+    totalCents: total,
+    receiptEmail: input.receiptEmail,
+  }
+
+  const itemSnapshot = {
+    kind: 'ticket',
+    productId: event.id,
+    slug: event.slug,
+    title: event.name,
+    thumbnail: event.imageUrl,
+    attributes: { Tipo: offer.ticketType, Categoria: offer.ticketCategory, Organizador: event.organizer },
+  }
+
+  const created = await prisma.order.create({
+    data: {
+      code: generateOrderCode(),
+      userId: input.userId,
+      status: 'pending',
+      subtotal,
+      shippingCost: 0,
+      total,
+      // pedido de ingresso: sem endereço/entrega — o snapshot do ingresso carrega tudo
+      ticketSnapshot,
+      reservationId: reservation.id,
+      idempotencyKey: input.idempotencyKey,
+      items: {
+        create: [
+          {
+            variantId: null,
+            productSnapshot: itemSnapshot,
+            unitPrice,
+            quantity,
+            lineTotal: unitPrice * quantity,
+          },
+        ],
+      },
+    },
+  })
+
+  return { order: toDetailPayload({ ...created, items: await prisma.orderItem.findMany({ where: { orderId: created.id } }) }), created: true }
 }

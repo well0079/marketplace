@@ -7,6 +7,15 @@ import { getShippingOptions } from './controllers/shipping.controller'
 import { cancelOrder, createOrder, getOrder, listOrders } from './controllers/order.controller'
 import { createPayment, getPayment } from './controllers/payment.controller'
 import { fastsoftWebhook } from './controllers/webhook.controller'
+import {
+  cancelReservation,
+  createReservation,
+  getEvent,
+  getSession,
+  listEvents,
+  listReservations,
+  listSessionOffers,
+} from './controllers/events.controller'
 
 // Express 4 não captura rejeições de handlers async — wrapper obrigatório
 const asyncHandler =
@@ -41,3 +50,11 @@ router.post('/payments', asyncHandler(createPayment))
 router.get('/payments/:id', asyncHandler(getPayment))
 // Webhook público da FastSoft (sem sessão; payload verificado contra o provedor)
 router.post('/webhooks/fastsoft', asyncHandler(fastsoftWebhook))
+// Tema ingressos: eventos públicos + reservas autenticadas
+router.get('/events', asyncHandler(listEvents))
+router.get('/events/:slug', asyncHandler(getEvent))
+router.get('/sessions/:id', asyncHandler(getSession))
+router.get('/sessions/:id/offers', asyncHandler(listSessionOffers))
+router.post('/reservations', asyncHandler(createReservation))
+router.get('/reservations/active', asyncHandler(listReservations))
+router.delete('/reservations/:id', asyncHandler(cancelReservation))

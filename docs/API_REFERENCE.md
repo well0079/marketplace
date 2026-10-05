@@ -85,6 +85,38 @@ Valores monetários em **centavos** (INTEGER) · Erros: `{ error: { code, messag
   regride). PAID → baixa de estoque atômica. Consulta falhando → 502 (reenvio). Malformado → 400.
   Respostas sempre sem detalhes internos.
 
+## Tema ingressos — eventos, sessões, ofertas e reservas (branch `ingressos`)
+- `GET /events?q&category&date&sort&page&limit` → `{ items: [{ id, slug, name, category, organizer,
+  imageUrl, featured, sessionCount, nextSessionAt, city, minPriceCents }], page, limit, total,
+  totalPages }` · q = nome/descrição/organizador · category = exata (case-insensitive) ·
+  date = AAAA-MM-DD (tem sessão no dia) · sort = relevance (padrão) | date | price_asc | price_desc
+- `GET /events/:slug` → evento + `sessions: [{ id, startsAt, city, uf, venue, hasOffers,
+  minPriceCents }]` (404 se não existir)
+- `GET /sessions/:id` → sessão + `event{}` + `types:[{value,minPriceCents}]` +
+  `categories:[...]` + `minPriceCents` + `hasOffers` (404)
+- `GET /sessions/:id/offers?type&category` → ofertas ATIVAS com disponibilidade > 0, preço asc:
+  `[{ id, ticketType, ticketCategory, priceCents, available, seller: "plataforma"|"vendedor" }]`
+- `POST /reservations` (auth) `{ offerId, quantity? (1–4, padrão 1) }` → 201
+  `{ id, quantity, expiresAt, offer{...} }` · **disponível = quantity − reservas ativas não
+  expiradas**; criação em transação com `SELECT ... FOR UPDATE` na oferta (duas pessoas nunca
+  reservam o último ingresso) · erros: 400 (quantity), 404, 422 OFFER_UNAVAILABLE ·
+  TTL da reserva: **10 minutos** (avaliado por timestamp, sem cron)
+- `GET /reservations/active` (auth) → reservas ativas não expiradas do usuário
+- `DELETE /reservations/:id` (auth) → `{ ok: true }` (404 de terceiro/inexistente, 422 se não ativa)
+- **POST /orders agora tem DOIS fluxos** (Idempotency-Key obrigatória nos dois):
+  1. `{ addressId, deliveryOption }` → carrinho (contrato anterior, inalterado)
+  2. `{ reservationId, receiptEmail? }` → **pedido de ingresso a partir da reserva**:
+     subtotal = preço da oferta × qty (SEMPRE do banco; preço do cliente ignorado);
+     **taxa de serviço = 10% do preço, ARREDONDADA ao centavo (Math.round) — regra em
+     order.service (SERVICE_FEE_RATE)**; total = subtotal + taxa; snapshot em
+     `ticketSnapshot` (evento, sessão, tipo, categoria, organizador, preços, taxa, total,
+     e-mail de recebimento); `shippingAddress`/`deliveryOption` nulos.
+     Erros: 404 (reserva de outro usuário) · 422 RESERVATION_EXPIRED / OFFER_UNAVAILABLE ·
+     400 (e-mail) · 409 IDEMPOTENCY_CONFLICT
+- **Baixa de estoque**: a oferta só perde `quantity` na CONFIRMAÇÃO do pagamento (PAID):
+  reserva ativa → `converted` + decremento; reserva expirada/cancelada → valida
+  disponibilidade agora, baixa se couber, senão `paid` + `needsReview` (pagamento nunca perdido)
+
 ## Formato do código do pedido
 `RD-` + 8 caracteres de `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (sem I/O/0/1), aleatórios via
 `node:crypto` (não sequenciais), com retry em colisão de unique.

@@ -132,7 +132,8 @@ export async function createPayment(
   if (active) return { payload: toPaymentPayload(active), created: false }
 
   // 4) Transação na FastSoft — amount/itens/frete SEMPRE do snapshot do pedido
-  const address = order.shippingAddress as Record<string, string>
+  const ticket = (order.ticketSnapshot ?? null) as { offerId?: string } | null
+  const address = (order.shippingAddress ?? null) as Record<string, string> | null
   const postbackUrl = process.env.PUBLIC_API_URL ? `${process.env.PUBLIC_API_URL.replace(/\/$/, '')}/api/v1/webhooks/fastsoft` : undefined
   const transaction = await fastsoft
     .createTransaction({
@@ -150,13 +151,13 @@ export async function createPayment(
       shipping: {
         fee: order.shippingCost,
         address: {
-          street: address.street ?? '',
-          streetNumber: address.number ?? '',
-          complement: address.complement ?? '',
-          zipCode: formatZipCode(address.zipCode ?? ''),
-          neighborhood: address.district ?? '',
-          city: address.city ?? '',
-          state: address.state ?? '',
+          street: address?.street ?? '',
+          streetNumber: address?.number ?? '',
+          complement: address?.complement ?? '',
+          zipCode: formatZipCode(address?.zipCode ?? ''),
+          neighborhood: address?.district ?? '',
+          city: address?.city ?? '',
+          state: address?.state ?? '',
           country: 'BR',
         },
       },
@@ -164,8 +165,9 @@ export async function createPayment(
         title: (item.productSnapshot as { title: string }).title,
         unitPrice: item.unitPrice,
         quantity: item.quantity,
+        // ingresso não tem variante: externalRef do item = oferta (ticketSnapshot)
         tangible: true,
-        externalRef: item.variantId,
+        externalRef: item.variantId ?? ticket?.offerId ?? 'ticket',
       })),
       pix: { expiresInDays: PIX_EXPIRES_IN_DAYS },
       // A API real REJEITA externalRef no nível raiz (400 "property externalRef
@@ -301,12 +303,50 @@ export async function applyTransition(paymentId: string, nextStatus: string, pai
     // Se faltar estoque, o pagamento NÃO é perdido: pedido pago com flag de revisão manual.
     await prisma.$transaction(async (tx) => {
       let needsReview = false
-      for (const item of payment.order.items) {
-        const updated = await tx.productVariant.updateMany({
-          where: { id: item.variantId, stock: { gte: item.quantity } },
-          data: { stock: { decrement: item.quantity } },
-        })
-        if (updated.count === 0) needsReview = true
+      const ticket = (payment.order.ticketSnapshot ?? null) as
+        | { kind?: string; offerId?: string }
+        | null
+      if (ticket?.kind === 'ticket' && ticket.offerId) {
+        // ── Pedido de INGRESSO: converte a reserva e baixa a oferta ──
+        // Reserva ativa e não expirada: converte e decrementa a oferta
+        // (deixar de contar a reserva + baixar quantity mantém a disponibilidade consistente).
+        const reservation = payment.order.reservationId
+          ? await tx.reservation.findUnique({ where: { id: payment.order.reservationId } })
+          : null
+        if (reservation && reservation.status === 'active' && reservation.expiresAt > new Date()) {
+          await tx.reservation.update({ where: { id: reservation.id }, data: { status: 'converted' } })
+          await tx.offer.update({
+            where: { id: ticket.offerId },
+            data: { quantity: { decrement: reservation.quantity } },
+          })
+        } else {
+          // Reserva expirada/cancelada: valida a disponibilidade AGORA antes de baixar.
+          const offer = await tx.offer.findUnique({ where: { id: ticket.offerId } })
+          const held = await tx.reservation.aggregate({
+            where: { offerId: ticket.offerId, status: 'active', expiresAt: { gt: new Date() } },
+            _sum: { quantity: true },
+          })
+          const available = (offer?.quantity ?? 0) - (held._sum.quantity ?? 0)
+          const quantity = (payment.order.items[0]?.quantity ?? 0)
+          if (offer && offer.status === 'active' && available >= quantity) {
+            await tx.offer.update({
+              where: { id: offer.id },
+              data: { quantity: { decrement: quantity } },
+            })
+          } else {
+            needsReview = true
+          }
+        }
+      } else {
+        // ── Pedido de PRODUTO (fluxo de carrinho original) ──
+        for (const item of payment.order.items) {
+          if (item.variantId === null) continue
+          const updated = await tx.productVariant.updateMany({
+            where: { id: item.variantId, stock: { gte: item.quantity } },
+            data: { stock: { decrement: item.quantity } },
+          })
+          if (updated.count === 0) needsReview = true
+        }
       }
       await tx.payment.update({
         where: { id: payment.id },
