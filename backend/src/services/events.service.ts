@@ -203,7 +203,7 @@ export async function getSessionDetail(sessionId: string) {
   }
   const toList = (map: Map<string, number>) => [...map.entries()].map(([value, minPriceCents]) => ({ value, minPriceCents })).sort((a, b) => a.minPriceCents - b.minPriceCents)
 
-  const { event, offers: _o, ...sessionFields } = session
+  const { event, offers: _o } = session
   return {
     id: session.id,
     startsAt: session.startsAt.toISOString(),
