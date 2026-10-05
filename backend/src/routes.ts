@@ -5,6 +5,8 @@ import { login, logout, me, register } from './controllers/auth.controller'
 import { createAddress, deleteAddress, listAddresses } from './controllers/address.controller'
 import { getShippingOptions } from './controllers/shipping.controller'
 import { cancelOrder, createOrder, getOrder, listOrders } from './controllers/order.controller'
+import { createPayment, getPayment } from './controllers/payment.controller'
+import { fastsoftWebhook } from './controllers/webhook.controller'
 
 // Express 4 não captura rejeições de handlers async — wrapper obrigatório
 const asyncHandler =
@@ -35,3 +37,7 @@ router.get('/orders', asyncHandler(listOrders))
 router.post('/orders', asyncHandler(createOrder))
 router.get('/orders/:code', asyncHandler(getOrder))
 router.post('/orders/:code/cancel', asyncHandler(cancelOrder))
+router.post('/payments', asyncHandler(createPayment))
+router.get('/payments/:id', asyncHandler(getPayment))
+// Webhook público da FastSoft (sem sessão; payload verificado contra o provedor)
+router.post('/webhooks/fastsoft', asyncHandler(fastsoftWebhook))

@@ -1,5 +1,36 @@
 # CHANGELOG
 
+## FASE 11 — Pagamento Pix FastSoft: cobrança, webhook verificado e confirmação (2026-10-05)
+- Backend: client isolado `lib/fastsoft.ts` (Basic auth `x:CHAVE`, timeout 15s, sem logar
+  chave/payload; contratos lidos na doc oficial — criar/obter transação, webhook). `POST /payments`
+  (Idempotency-Key obrigatória; rate limit 10/min ajustável por PAYMENTS_RATE_LIMIT; valida CPF
+  com dígito verificador e telefone; só pedido `pending` do próprio usuário; nunca dois Pix
+  ativos — pagamento ativo não expirado é devolvido; amount/itens/frete sempre do snapshot do
+  pedido; CPF enviado formatado e guardado SÓ mascarado). `GET /payments/:id` reconsulta o
+  provedor quando o status local está ativo e obsoleto (>10s). `POST /webhooks/fastsoft`
+  (público, sem assinatura na doc): persiste evento bruto com dedupe SHA-256, RECONSULTA a
+  FastSoft conferindo amount/externalRef antes de aplicar transições com guarda (nunca regridem;
+  tabela da doc). PAID em uma transação: Payment=paid + Order=paid + baixa atômica de estoque;
+  estoque insuficiente → pedido `paid` com `needsReview` (pagamento nunca perdido).
+  Migrations: campos Pix/paidAt/masked/lastSyncedAt + providerTransactionId/dedupeKey únicos +
+  `Order.needsReview` (aplicadas com `migrate deploy`).
+- Frontend: bloco "Pagar com Pix" no pedido-recebido e no detalhe (dados do pagador pré-
+  preenchidos, máscara + validação de CPF/telefone no cliente); tela `/payments/:id` com QR
+  (base64 PNG/URL/texto EMV via `react-qr-code`, ~20 kB SVG justificado), copia e cola,
+  contagem de expiração e polling 4s (pausa em aba oculta, para ao pagar); `/checkout/success`
+  SÓ confirma com a API (`status === 'paid'`); badge "Pago" nos pedidos; `OrderStatus` ganhou
+  `paid`.
+- Testes: +14 no backend com client 100% mockado (`payments.test.ts` — criação/valor do banco/
+  payload à FastSoft/CPF mascarado no banco, idempotência, Pix ativo/expirado, webhook com
+  divergência/dedupe/regressão/estoque/502, 404 de terceiro; 68 total) e +15 no frontend
+  (máscaras/DV de CPF, polling/QR/countdown, bloqueio do /checkout/success; 145 frontend).
+  Suíte geral: 213 testes.
+- Verificação no navegador SEM COBRANÇA REAL (backend rodou com FASTSOFT_SECRET_KEY vazia):
+  bloco Pix com nome pré-preenchido, CPF inválido bloqueado no cliente, erro 502 do provedor
+  tratado com Alert, /checkout/success bloqueada para pedido pending, mobile 390px ok.
+- Docs: `FASTSOFT.md` criado (confirmado com página de origem, mapa de status, pendências e
+  riscos: sem sandbox, webhook sem assinatura, HTTPS obrigatório para postback).
+
 ## FASE 10 — Pedidos: criação idempotente, snapshot, lista e detalhe (2026-10-04)
 - Backend: `POST /orders` (header `Idempotency-Key` obrigatório; body `{ addressId, deliveryOption }`;
   totais e frete SEMPRE recalculados no servidor — valores do cliente ignorados; snapshot de

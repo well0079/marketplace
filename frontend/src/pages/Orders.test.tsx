@@ -207,16 +207,26 @@ describe('OrderReceived — pós-confirmação', () => {
     initialPath: '/checkout/pedido-recebido/RD-AB12CD34',
   })
 
-  it('exibe confirmação com código, status e aviso honesto de pagamento', () => {
+  it('exibe confirmação com código, status e bloco de Pix para pedido pending', () => {
     expect(html).toContain('Pedido recebido')
     expect(html).toContain('RD-AB12CD34')
-    expect(html).toContain('aguardando pagamento')
-    expect(html).toContain('não foi cobrado')
+    expect(html).toContain('Aguardando pagamento')
+    expect(html).toContain('Pagar com Pix')
+    expect(html).toContain('Gerar QR Code Pix')
   })
 
-  it('linka para Meus pedidos e não tem botão de pagar', () => {
+  it('linka para Meus pedidos e não tem botão de pagar falso', () => {
     expect(html).toContain('Ver meus pedidos')
     expect(html.toLowerCase()).not.toContain('pagar agora')
+  })
+
+  it('pedido pago não mostra o formulário de Pix', () => {
+    const htmlPaid = renderWith(<OrderReceived />, {
+      order: { ...ORDER_DETAIL, status: 'paid' as const },
+      initialPath: '/checkout/pedido-recebido/RD-AB12CD34',
+    })
+    expect(htmlPaid).toContain('Pago')
+    expect(htmlPaid).not.toContain('Gerar QR Code Pix')
   })
 
   it('404 mostra estado vazio', () => {

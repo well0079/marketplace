@@ -16,6 +16,7 @@ import { ErrorState } from '../components/ui/ErrorState'
 import { Separator } from '../components/ui/Separator'
 import { Skeleton } from '../components/ui/Skeleton'
 import { ProductImage } from '../components/ecommerce/ProductImage'
+import { PixPaymentCard } from '../components/ecommerce/PixPaymentCard'
 
 export function OrderDetail() {
   const { code } = useParams<{ code: string }>()
@@ -151,6 +152,15 @@ function OrderDetailContent({ code }: { code: string }) {
           </Card>
 
           <div className="flex min-w-0 flex-col gap-4">
+            {order.status === 'pending' && (
+              <Card className="flex flex-col gap-3 p-5">
+                <PixPaymentCard
+                  orderCode={order.code}
+                  total={order.total}
+                  defaultName={order.shippingAddress.recipient ?? ''}
+                />
+              </Card>
+            )}
             <Card className="flex flex-col gap-3 p-5">
               <h2 className="text-h4 text-foreground">Totais</h2>
               <div className="flex items-center justify-between text-body-small text-muted-foreground">

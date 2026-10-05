@@ -10,8 +10,14 @@
       apenas validado (422), listagem paginada, detalhe e cancelamento (só pending);
       /orders + /orders/:code + /checkout/pedido-recebido/:code no frontend; etapa de
       Revisão no checkout com Idempotency-Key por tentativa; "Meus pedidos" no Header.
-- [ ] FASE 11+ — Pagamento: tela de pagamento do pedido pending (FastSoft é a última fase,
-      server-side); decremento de estoque na confirmação; status paid/shipped/delivered.
+- [x] FASE 11 — Pagamento Pix (FastSoft): POST /payments idempotente + webhook verificado por
+      reconsulta, PAID com baixa de estoque (needsReview se faltar), tela do QR com polling e
+      /checkout/success confirmada pela API. Detalhes e pendências em docs/FASTSOFT.md.
+- [ ] FASE 12+ — Pós-pagamento: tratamento de REFUNDED/CHARGEDBACK no pedido (hoje só o Payment
+      muda), tela de "pagamento em análise" dedicada, notificação de confirmação; cartão/boleto
+      (FastSoft suporta — documentado em FASTSOFT.md como pendente).
+- [ ] Cobrança real de teste: só com autorização explícita (não há sandbox; ver riscos em
+      FASTSOFT.md). Webhook exige PUBLIC_API_URL HTTPS público (produção).
 - [ ] Sessão: stateless — revogação server-side de tokens (ex.: tabela Session) se exigido;
       "Minha conta" (dados pessoais/endereços) ainda não existe como página própria.
 - [ ] Estoque insuficiente via UI: QuantitySelector já limita ao estoque; o 409 do servidor só

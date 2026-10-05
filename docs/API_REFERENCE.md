@@ -58,7 +58,31 @@ Valores monetários em **centavos** (INTEGER) · Erros: `{ error: { code, messag
 - `GET /orders/:code` → detalhe completo (404 se não existir OU for de outro usuário — escolha
   documentada em DECISIONS.md)
 - `POST /orders/:code/cancel` → pedido cancelado (`status: "cancelled"`, `cancelledAt` preenchido);
-  só quando `pending` (422 INVALID_STATUS caso contrário); não mexe em estoque
+  só quando `pending` (422 INVALID_STATUS caso contrário); não mexe em estoque.
+  Status de Order: `pending` | `paid` | `cancelled` (paid/shipped/delivered reservados; needsReview
+  marca pedido pago com estoque insuficiente para revisão manual).
+
+## Pagamentos (sessão obrigatória; provedor FastSoft — ver docs/FASTSOFT.md)
+- `POST /payments` — headers: `Idempotency-Key` (obrigatória). Rate limit 10/min por usuário (429
+  RATE_LIMITED; ajustável via PAYMENTS_RATE_LIMIT).
+  body: `{ orderCode, method: "pix", payer: { name, document (CPF), phone } }`
+  → 201 criado / 200 pagamento existente (mesma key, ou Pix ativo não expirado):
+  `{ paymentId, status, paid, orderCode, amount, pix: { qrCode, qrImageUrl, expiresAt } }`
+  Status do pagamento = status normalizado da FastSoft: WAITING_PAYMENT, PROCESSING, IN_ANALYSIS,
+  AUTHORIZED, PAID, REFUNDED, CHARGEDBACK, IN_PROTEST, REFUSED, CANCELED.
+  Erros: 400 VALIDATION (CPF dígito verificador, telefone, method ≠ pix) · 404 pedido de outro
+  usuário · 422 INVALID_STATUS (pago/cancelado) · 502 PAYMENT_PROVIDER_ERROR.
+  Regras: amount/itens/frete sempre do snapshot do pedido; CPF guardado só mascarado; um pedido
+  não tem dois Pix ativos; expirado libera novo.
+- `GET /payments/:id` → mesmo payload (só do dono; 404 para terceiros). Se o status local ainda
+  estiver ativo e a última checagem tiver >10s, reconsulta a FastSoft (fallback do webhook).
+
+## Webhook FastSoft (público)
+- `POST /webhooks/fastsoft` — envelope `{ type, objectId, data: { id, status, amount, ... } }`.
+  NÃO confia no payload: grava bruto (dedupe SHA-256), localiza o pagamento e RECONSULTA a
+  FastSoft conferindo amount/externalRef antes de aplicar a transição (guarda de estado, nunca
+  regride). PAID → baixa de estoque atômica. Consulta falhando → 502 (reenvio). Malformado → 400.
+  Respostas sempre sem detalhes internos.
 
 ## Formato do código do pedido
 `RD-` + 8 caracteres de `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (sem I/O/0/1), aleatórios via

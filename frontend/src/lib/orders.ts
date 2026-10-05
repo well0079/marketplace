@@ -15,7 +15,7 @@ export type OrderItemSnapshot = {
   lineTotal: number
 }
 
-export type OrderStatus = 'pending' | 'cancelled'
+export type OrderStatus = 'pending' | 'paid' | 'cancelled'
 
 export type OrderDetail = {
   code: string
@@ -88,8 +88,9 @@ export function newIdempotencyKey(): string {
   return crypto.randomUUID()
 }
 
-export function orderStatusMeta(status: OrderStatus): { label: string; badge: 'warning' | 'destructive' } {
+export function orderStatusMeta(status: OrderStatus): { label: string; badge: 'warning' | 'destructive' | 'success' } {
   if (status === 'cancelled') return { label: 'Cancelado', badge: 'destructive' }
+  if (status === 'paid') return { label: 'Pago', badge: 'success' }
   return { label: 'Aguardando pagamento', badge: 'warning' }
 }
 

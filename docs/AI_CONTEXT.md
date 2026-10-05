@@ -3,12 +3,13 @@ Objetivo: marketplace estilo Mercado Livre (pt-BR/BRL), competição com prazo c
 Stack: React+Vite+TS+Tailwind3 | Express+TS+Prisma5+Postgres16 | pnpm monorepo.
 Regras: dinheiro em centavos; FastSoft só na fase final e server-side; nunca simular
 pagamento; nunca copiar código/ativos do ML; não trocar a stack.
-Fase atual: 10 (pedidos) concluída. Próximas: 11+ pagamento (FastSoft por último, server-side).
+Fase atual: 11 (pagamento Pix FastSoft) concluída. Próximas: 12+ pós-pagamento (REFUNDED, notificações); FastSoft server-side OK.
 API: GET /api/v1/health · /products (q,page,limit,sort,category) · /products/:slug · /categories
 · /cart (+ /cart/items CRUD) · /auth/register|login|logout|me · /addresses (GET,POST,DELETE /:id)
 · /shipping/options?zipCode= (citação de frete pelo carrinho do cookie)
-· /orders (POST com header Idempotency-Key; GET paginado; GET/:code; POST/:code/cancel) —
-  contratos completos em docs/API_REFERENCE.md
+· /orders (POST com header Idempotency-Key; GET paginado; GET/:code; POST/:code/cancel)
+· /payments (POST com Idempotency-Key + rate limit; GET/:id com reconsulta) · /webhooks/fastsoft
+  (público, verificado por reconsulta ao provedor) — contratos em docs/API_REFERENCE.md e docs/FASTSOFT.md
 
 ## FASE 1 — correções preservadas (não reverter)
 1. `ProductVariant.createdAt` existe no schema (service ordena variantes por ele).
@@ -222,3 +223,29 @@ Convenções:
   EmptyState (o componente decide por instanceof/status).
 - Formatação: formatDate/formatDateTime em lib/format (pt-BR; formatDateTime troca vírgula por
   " às").
+
+## FASE 11 — Pagamento Pix (FastSoft)
+- Contratos da FastSoft confirmados página a página (origem anotada em docs/FASTSOFT.md). NADA
+  inventado: o que a doc não define (assinatura de webhook, formato normativo do pix.qrcode,
+  sandbox) virou PENDENTE/risco. `pix.qrcode` no example é base64 PNG; frontend trata image/url/
+  texto (PixQrCode em components/ecommerce/PixPaymentCard.tsx).
+- `lib/fastsoft.ts`: AUTH `Basic base64("x:"+key)`; NUNCA logar chave/payload (erros só
+  status); `isConfigured()` existe para o .env.example/dev.
+- `services/payment.service.ts`: validatePayer (CPF com dígito verificador — mesma regra em
+  frontend/lib/payer.ts), createPayment (idempotência → método → pedido 404/422 → Pix ativo não
+  expirado devolvido → FastSoft 502 genérico), syncPaymentFromProvider (amount/externalRef
+  conferidos) e applyTransition (guarda ALLOWED_TRANSITIONS; PAID = transação
+  payment+order+estoque; falta de estoque → needsReview, não perde o pagamento).
+- Webhook: dedupe ANTES da consulta (SHA-256 do corpo em PaymentEvent.dedupeKey); unknown → 200;
+  FastSoft falha → 502. Rate limit em memória (PAYMENTS_RATE_LIMIT, default 10/min; testes
+  forçam 1000 via env no topo do arquivo de teste).
+- Frontend: lib/payments.ts (paymentRefetchInterval pausa em aba oculta; secondsUntil/countdown;
+  pixQrCodeKind), lib/payer.ts (máscaras+DV), PixPaymentCard (form pré-preenchido, reusado em
+  pedido-recebido e detalhe), páginas PixPayment (/payments/:id, polling 4s, PAID → redireciona)
+  e CheckoutSuccess (/checkout/success?order= só com API confirmando paid).
+- TESTE GOTCHA: no arquivo de teste, mockar `../src/lib/fastsoft` com vi.mock ANTES dos imports;
+  e NÃO nomear função do controller igual à do service importada (sombreamento vira recursão —
+  use alias `createPaymentService`). Cada teste de criação usa pedido PRÓPRIO (Pix ativo é
+  devolvido e atrapalha quem reusa o pedido).
+- Cobrança real: PROIBIDA sem autorização explícita do usuário (sem sandbox!). Validação no
+  navegador foi feita com FASTSOFT_SECRET_KEY="" no processo do dev server.

@@ -14,6 +14,7 @@ import { EmptyState } from '../components/ui/EmptyState'
 import { Separator } from '../components/ui/Separator'
 import { Skeleton } from '../components/ui/Skeleton'
 import { ProductImage } from '../components/ecommerce/ProductImage'
+import { PixPaymentCard } from '../components/ecommerce/PixPaymentCard'
 
 // Tela pós-confirmação: pedido criado, pagamento vem na fase seguinte
 export function OrderReceived() {
@@ -85,9 +86,10 @@ function OrderReceivedContent({ code }: { code: string }) {
         </div>
 
         <Alert variant="info" title="Aguardando pagamento">
-          Seu pedido foi registrado e está aguardando pagamento. O pagamento será habilitado em seguida —
-          você não foi cobrado nesta etapa.
+          Seu pedido foi registrado. Pague com Pix abaixo — a confirmação aparece automaticamente.
         </Alert>
+
+        {order.status === 'pending' && <PixPaymentCard orderCode={order.code} total={order.total} defaultName={order.shippingAddress.recipient} />}
 
         <Card className="flex flex-col gap-4 p-5">
           <h2 className="text-h4 text-foreground">Resumo do pedido</h2>

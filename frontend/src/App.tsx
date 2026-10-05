@@ -13,6 +13,8 @@ import { Checkout } from './pages/Checkout'
 import { OrderReceived } from './pages/OrderReceived'
 import { Orders } from './pages/Orders'
 import { OrderDetail } from './pages/OrderDetail'
+import { PixPayment } from './pages/PixPayment'
+import { CheckoutSuccess } from './pages/CheckoutSuccess'
 
 export function App() {
   return (
@@ -29,8 +31,10 @@ export function App() {
       <Route path="/register" element={<Register />} />
       <Route path="/checkout" element={<Checkout />} />
       <Route path="/checkout/pedido-recebido/:code" element={<OrderReceived />} />
+      <Route path="/checkout/success" element={<CheckoutSuccess />} />
       <Route path="/orders" element={<Orders />} />
       <Route path="/orders/:code" element={<OrderDetail />} />
+      <Route path="/payments/:id" element={<PixPayment />} />
       <Route path="*" element={<NotFound />} />
       </Routes>
     </>

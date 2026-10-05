@@ -52,3 +52,32 @@ Registro das decisões que NÃO são óbvias pelo código. Datas em 2026.
 - **`X-Requested-With`**: a instrução da fase citava um "padrão atual" de exigir esse header;
   ele NUNCA existiu no código. Decisão: não inventar — auth continua por cookie httpOnly +
   `Idempotency-Key` no POST /orders.
+
+## FASE 11 — Pagamento Pix (FastSoft)
+- **Client único**: `backend/src/lib/fastsoft.ts` — frontend nunca fala com o provedor; timeout
+  15s; erros normalizados (FastSoftError, status 0 = rede); chave NUNCA logada; payload nunca
+  logado.
+- **pix.qrcode**: o example da doc vem como base64 de imagem PNG (não como EMV copia-e-cola) e a
+  doc não normatiza o formato → o frontend trata imagem base64, URL e texto (QR local com
+  react-qr-code, ~20 kB SVG, dependência justificada em FASTSOFT.md).
+- **Webhook sem assinatura**: a FastSoft não documenta nenhuma. Confiança vem da RECONSULTA
+  autenticada (`Obter Transação`) conferindo amount + externalRef antes de qualquer transição;
+  dedupe por SHA-256 do corpo em PaymentEvent. Consulta falha → 502 (provedor reenvia);
+  divergência/unknown → 200 ignorado (reenvio não mudaria nada).
+- **Guarda de estados**: tabela de transições literal da doc; nada regride; PAID só avança para
+  REFUNDED/IN_PROTEST/CHARGEDBACK. Status FastSoft gravados normalizados (toUpperCase) no
+  Payment; Order usa pending/paid/cancelled.
+- **PAID**: baixa de estoque atômica (`stock >= qty`) na mesma transação; se faltar estoque,
+  pedido fica `paid` com `needsReview=true` (pagamento nunca perdido) + log de revisão manual.
+- **Um Pix vivo por pedido**: pagamento WAITING_PAYMENT/PROCESSING não expirado é devolvido em
+  POST /payments; expirado libera novo. REFUSED/CANCELED também liberam.
+- **CPF**: enviado formatado à FastSoft, persistido SÓ mascarado (`***.982.247-**`);
+  requestPayload/responsePayload ficam nulos.
+- **Rate limit**: 10/min/usuário em POST /payments (PAYMENTS_RATE_LIMIT ajusta; testes usam 1000).
+- **postbackUrl**: só enviado com PUBLIC_API_URL (HTTPS público); dev confirma por polling
+  (GET /payments/:id reconsulta após 10s de obsolescência).
+- **Rota de sucesso**: `/checkout/success?order=RD-XXXX` renderiza sucesso SÓ com
+  `Order.status === 'paid'` confirmado pela API.
+- Migration escrita à mão (`payment_pix_fields`) com `migrate deploy`: o `migrate dev` recusa
+  ambiente não-interativo quando há warnings (unique em coluna nullable); SQL idêntico ao do
+  Prisma.

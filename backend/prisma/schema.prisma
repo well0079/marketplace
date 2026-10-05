@@ -144,6 +144,7 @@ model Order {
   idempotencyKey  String    @unique
   expiresAt       DateTime?
   cancelledAt     DateTime?
+  needsReview     Boolean   @default(false)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   user     User        @relation(fields: [userId], references: [id])
@@ -167,32 +168,39 @@ model OrderItem {
 }
 
 model Payment {
-  id                    String   @id @default(uuid()) @db.Uuid
-  orderId               String   @db.Uuid
-  provider              String   @default("fastsoft")
-  providerTransactionId String?
+  id                    String    @id @default(uuid()) @db.Uuid
+  orderId               String    @db.Uuid
+  provider              String    @default("fastsoft")
+  providerTransactionId String?   @unique
   method                String?
+  status                String    @default("created")
   amount                Int
-  status                String   @default("created")
+  pixQrCode             String?
+  pixExpiresAt          DateTime?
+  payerDocumentMasked   String?
+  paidAt                DateTime?
+  lastSyncedAt          DateTime?
   requestPayload        Json?
   responsePayload       Json?
-  idempotencyKey        String   @unique
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  idempotencyKey        String    @unique
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
   order  Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
   events PaymentEvent[]
   @@index([orderId])
 }
 
 model PaymentEvent {
-  id              String    @id @default(uuid()) @db.Uuid
-  paymentId       String?   @db.Uuid
-  providerEventId String?   @unique
-  eventType       String
-  rawPayload      Json
-  signatureValid  Boolean   @default(false)
-  receivedAt      DateTime  @default(now())
-  processedAt     DateTime?
+  id                    String    @id @default(uuid()) @db.Uuid
+  paymentId             String?   @db.Uuid
+  providerTransactionId String?
+  providerEventId       String?   @unique
+  dedupeKey             String?   @unique
+  eventType             String
+  rawPayload            Json
+  signatureValid        Boolean   @default(false)
+  receivedAt            DateTime  @default(now())
+  processedAt           DateTime?
   payment Payment? @relation(fields: [paymentId], references: [id])
 }
 
