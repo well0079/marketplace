@@ -116,3 +116,10 @@ Registro das decisões que NÃO são óbvias pelo código. Datas em 2026.
   CLI sem exposição.
 - Domínios: marketplace-api-alpha.vercel.app · marketplace-web-khaki.vercel.app (rewrite do web
   fixa a URL da API em frontend/vercel.json — interpolação de env em `destination` não suportada).
+### Webhook end-to-end em produção (05/10/2026, R$ 10 pago de verdade)
+- O postback da FastSoft CHEGOU (2×) e o polling da tela também consultou — nenhuma transição
+  foi aplicada: a conferência `externalRef ?? metadataOrderCode` rejeitava porque a gateway
+  gera o próprio externalRef (NSU). Correção: identidade EXCLUSIVAMENTE por
+  `metadata.orderCode`; rejeição loga o externalRef da gateway. Teste de regressão dedicado.
+- Ensinamento: a conferência de referência era rígida demais para o contrato real; amount +
+  metadata + vínculo por providerTransactionId mantêm a proteção.

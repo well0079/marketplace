@@ -258,17 +258,19 @@ export async function syncPaymentFromProvider(paymentId: string): Promise<void> 
     await prisma.payment.update({ where: { id: payment.id }, data: { lastSyncedAt: new Date() } })
     return
   }
-  // Identidade da transação: externalRef OU metadata.orderCode (a API real não
-  // devolve externalRef raiz porque não a enviamos)
+  // Identidade da transação: casar EXCLUSIVAMENTE por metadata.orderCode (campo que
+  // controlamos). O externalRef é GERADO PELA GATEWAY (descoberta de produção: ela
+  // devolve um NSU próprio, ex. "JP7ZMGGWG54Z") e NÃO é critério de vínculo.
   let metadataOrderCode: string | undefined
   try {
     metadataOrderCode = (JSON.parse(String(transaction.metadata ?? '{}')) as { orderCode?: string }).orderCode
   } catch {
-    /* metadata não-JSON: ignora */
+    /* metadata não-JSON → rejeita abaixo */
   }
-  const ref = transaction.externalRef ?? metadataOrderCode
-  if (ref && ref !== payment.order.code) {
-    console.error(`[fastsoft] divergência de referência no pagamento ${payment.id}: ignorado`)
+  if (metadataOrderCode !== payment.order.code) {
+    console.error(
+      `[fastsoft] referência divergente no pagamento ${payment.id} (externalRef ${JSON.stringify(transaction.externalRef) ?? 'sem externalRef'}, metadata ${JSON.stringify(transaction.metadata ?? null)}): ignorado`,
+    )
     await prisma.payment.update({ where: { id: payment.id }, data: { lastSyncedAt: new Date() } })
     return
   }

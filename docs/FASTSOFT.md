@@ -87,6 +87,12 @@ PAID→REFUNDED/IN_PROTEST/CHARGEDBACK · IN_PROTEST→REFUNDED/CHARGEDBACK.
    local e oferece "Copiar código Pix".
 5. Erros HTTP 400 de recusa chegam com `data.id`/`data.status: "refused"` — a transação É criada
    no provedor em estado refused (não há cobrança).
+6. **`externalRef` da consulta é NSU GERADO PELA GATEWAY** (ex.: `"JP7ZMGGWG54Z"`), não o nosso
+   código de pedido — mesmo sem enviarmos externalRef raiz. Por isso a identidade da
+   transação casa EXCLUSIVAMENTE por `metadata.orderCode` (defesa em profundidade: transação
+   com metadata divergente → transição rejeitada e log com o externalRef da gateway).
+   Bug de produção em 05/10: a comparação `externalRef ?? metadataOrderCode` bloqueava TODAS
+   as transições (12+ ignoradas); corrigido e coberto por teste de regressão.
 
 ## Riscos conhecidos
 

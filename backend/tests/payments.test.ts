@@ -33,6 +33,16 @@ let variantId: string
 let orderVariantId: string // variante do pedido principal (usada nas asserções de estoque)
 const cleanup: { products: string[]; categories: string[]; users: string[] } = { products: [], categories: [], users: [] }
 
+
+// Transação como a gateway REAL devolve: externalRef é NSU gerado por ELA; nosso
+// vínculo ao pedido vive em metadata (descoberta de produção)
+const gwTransaction = (overrides: Partial<Record<string, unknown>> = {}, orderCodeArg = orderCode) => ({
+  ...FASTSOFT_CREATED,
+  externalRef: `GW-${suffix}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+  metadata: JSON.stringify({ orderCode: orderCodeArg }),
+  ...overrides,
+})
+
 const FASTSOFT_CREATED = {
   id: `tx-${suffix}`,
   amount: 0,
@@ -299,7 +309,7 @@ describe('Webhook + sincronização', () => {
   })
 
   it('evento PAID: consulta a FastSoft, confere valor/ref, marca pago e DECREMENTA estoque', async () => {
-    getTransaction.mockResolvedValue({ ...FASTSOFT_CREATED, amount: 15000, status: 'PAID', externalRef: orderCode })
+    getTransaction.mockResolvedValue(gwTransaction({ amount: 15000, status: 'PAID' }))
     const res = await request(app).post('/api/v1/webhooks/fastsoft').send(webhookBody())
     expect(res.status).toBe(200)
 
@@ -327,7 +337,7 @@ describe('Webhook + sincronização', () => {
   })
 
   it('nunca regride: PAID não volta para WAITING_PAYMENT', async () => {
-    getTransaction.mockResolvedValue({ ...FASTSOFT_CREATED, amount: 15000, status: 'WAITING_PAYMENT', externalRef: orderCode })
+    getTransaction.mockResolvedValue(gwTransaction({ amount: 15000, status: 'WAITING_PAYMENT' }))
     // webhook de regressão chega com payload divergente do provedor? consulta manda: WAITING após PAID → guarda bloqueia
     const res = await request(app)
       .post('/api/v1/webhooks/fastsoft')
@@ -347,13 +357,33 @@ describe('Webhook + sincronização', () => {
       .set('Idempotency-Key', `pay-${suffix}-divergente`)
       .send({ orderCode: order2.code, method: 'pix', payer: PAYER })
 
-    getTransaction.mockResolvedValue({ ...FASTSOFT_CREATED, id: `tx-${suffix}-b`, amount: 999, status: 'PAID', externalRef: order2.code })
+    getTransaction.mockResolvedValue(gwTransaction({ id: `tx-${suffix}-b`, amount: 999, status: 'PAID' }, order2.code))
     const res = await request(app)
       .post('/api/v1/webhooks/fastsoft')
       .send({ type: 'transaction', objectId: `tx-${suffix}-b`, data: { id: `tx-${suffix}-b`, status: 'PAID', amount: 15000, externalRef: order2.code } })
     expect(res.status).toBe(200)
     expect((await prisma.payment.findUnique({ where: { id: pay.body.paymentId } }))?.status).toBe('WAITING_PAYMENT')
     expect((await prisma.order.findUnique({ where: { id: order2.id } }))?.status).toBe('pending')
+  })
+
+  it('REGRESSÃO: metadata divergente → PAID não aplicado mesmo com valor batendo', async () => {
+    const user = await prisma.user.findUnique({ where: { email: USER.email } })
+    const orderR = await createOrderFor(user!.id)
+    createTransaction.mockResolvedValue(gwTransaction({ id: `tx-${suffix}-r`, amount: 15000 }, orderR.code))
+    const pay = await request(app)
+      .post('/api/v1/payments')
+      .set('Cookie', auth)
+      .set('Idempotency-Key', `pay-${suffix}-regmeta`)
+      .send({ orderCode: orderR.code, method: 'pix', payer: PAYER })
+
+    // consulta devolve PAID com amount correto, mas metadata aponta para OUTRO pedido
+    getTransaction.mockResolvedValue(gwTransaction({ id: `tx-${suffix}-r`, amount: 15000, status: 'PAID' }, 'RD-OUTRO Pedido'))
+    await request(app)
+      .post('/api/v1/webhooks/fastsoft')
+      .send({ type: 'transaction', objectId: `tx-${suffix}-r`, data: { id: `tx-${suffix}-r`, status: 'PAID', amount: 15000 } })
+
+    expect((await prisma.payment.findUnique({ where: { id: pay.body.paymentId } }))?.status).toBe('WAITING_PAYMENT')
+    expect((await prisma.order.findUnique({ where: { id: orderR.id } }))?.status).toBe('pending')
   })
 
   it('estoque insuficiente na confirmação: pedido fica paid com needsReview (pagamento não perdido)', async () => {
@@ -370,7 +400,7 @@ describe('Webhook + sincronização', () => {
       .set('Idempotency-Key', `pay-${suffix}-semestoque`)
       .send({ orderCode: order3.code, method: 'pix', payer: PAYER })
 
-    getTransaction.mockResolvedValue({ ...FASTSOFT_CREATED, id: `tx-${suffix}-c`, amount: 15000, status: 'PAID', externalRef: order3.code })
+    getTransaction.mockResolvedValue(gwTransaction({ id: `tx-${suffix}-c`, amount: 15000, status: 'PAID' }, order3.code))
     await request(app)
       .post('/api/v1/webhooks/fastsoft')
       .send({ type: 'transaction', objectId: `tx-${suffix}-c`, data: { id: `tx-${suffix}-c`, status: 'PAID', amount: 15000, externalRef: order3.code } })
