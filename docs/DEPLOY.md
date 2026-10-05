@@ -56,7 +56,8 @@ refazer apaga usuários, pedidos e pagamentos reais. Não rodar de novo sem deci
 | Webhook malformado | 400 INVALID_JSON (raw body sobreviveu ao serverless) |
 | Webhook transação desconhecida | 200 `{applied:false, unknown_transaction}` |
 | Cold start (1º request pós-deploy) | 0.92s |
-| pnpm test / lint / build | 198 testes ✓ / ✓ / ✓ |
+| pnpm test / lint / build | 199 testes ✓ / ✓ / ✓ |
+| **WEBHOOK end-to-end (pago de verdade)** | postback chegou 2× (17:23:30) + reenvio manual → 200 `received`; `RD-BHTCN3TF` confirmado: order `paid`, payment `PAID` (paidAt da gateway preservado), estoque baixado 5→4. Correção prévia necessária: identidade por `metadata.orderCode` (externalRef da gateway é NSU dela) |
 
 ## Logs / diagnóstico
 
