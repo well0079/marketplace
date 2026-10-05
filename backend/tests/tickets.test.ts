@@ -245,7 +245,7 @@ describe('POST /reservations — reserva com lock', () => {
     const fixture = await makeFixture({ quantity: 1 })
     const results = await Promise.allSettled([reserve(authA, fixture.offerId), reserve(authB, fixture.offerId)])
     const statuses = results.map((r) => (r.status === 'fulfilled' ? r.value.status : 0))
-    expect(statuses.filter((s) => s === 201)).toHaveLength(1)
+    expect(statuses.filter((s) => s === 201 || s === 200)).toHaveLength(1)
     expect(statuses.filter((s) => s === 422)).toHaveLength(1)
 
     // a oferta com availability 0 nem aparece na listagem
@@ -256,6 +256,65 @@ describe('POST /reservations — reserva com lock', () => {
     const winner = results.find((r) => r.status === 'fulfilled') as PromiseFulfilledResult<request.Response>
     const reservationId = winner.value.body.id
     await request(app).delete(`/api/v1/reservations/${reservationId}`).set('Cookie', authA)
+  })
+
+  it('NO MÁXIMO 1 reserva ativa por usuário: reservar outra oferta cancela a anterior', async () => {
+    const fx1 = await makeFixture({ quantity: 3 })
+    const fx2 = await makeFixture({ quantity: 3 })
+    const first = await reserve(authA, fx1.offerId)
+    expect(first.status).toBe(201)
+
+    const second = await reserve(authA, fx2.offerId)
+    expect(second.status).toBe(201)
+
+    // a reserva da fx1 virou cancelled (estoque liberado: oferta aparece de novo)
+    const cancelled = await prisma.reservation.findUnique({ where: { id: first.body.id } })
+    expect(cancelled?.status).toBe('cancelled')
+    const offers1 = await request(app).get(`/api/v1/sessions/${fx1.sessionId}/offers`)
+    expect(offers1.body.some((o: { id: string }) => o.id === fx1.offerId)).toBe(true)
+
+    // active lista só a nova
+    const active = await request(app).get('/api/v1/reservations/active').set('Cookie', authA)
+    expect(active.body).toHaveLength(1)
+    expect(active.body[0].id).toBe(second.body.id)
+  })
+
+  it('REAPROVEITA a reserva ativa da mesma oferta (renova TTL, sem criar outra)', async () => {
+    const fixture = await makeFixture({ quantity: 3 })
+    const first = await reserve(authA, fixture.offerId)
+    expect(first.status).toBe(201)
+    const userA = await prisma.user.findUnique({ where: { email: USER_A.email } })
+    const countBefore = await prisma.reservation.count({ where: { userId: userA!.id } })
+
+    const again = await reserve(authA, fixture.offerId)
+    expect(again.status).toBe(200)
+    expect(again.body.reused).toBe(true)
+    expect(again.body.id).toBe(first.body.id)
+    expect(new Date(again.body.expiresAt).getTime()).toBeGreaterThan(new Date(first.body.expiresAt).getTime())
+    expect(await prisma.reservation.count({ where: { userId: userA!.id } })).toBe(countBefore)
+  })
+
+  it('rate limit: acima do limite configurado → 429', async () => {
+    const fixture = await makeFixture({ quantity: 4 })
+    const email = `rate.reserva.${suffix}@teste.com`
+    const user = await request(app).post('/api/v1/auth/register').send({
+      name: 'Rate Reserva', email, password: 'senha-segura-123',
+    })
+    const cookie = authCookieFrom(user)
+    cleanupUserEmails.push(email)
+
+    process.env.RESERVATIONS_RATE_LIMIT = '2'
+    try {
+      const r1 = await reserve(cookie, fixture.offerId)
+      const r2 = await reserve(cookie, fixture.offerId) // reuso → 200
+      const r3 = await reserve(cookie, fixture.offerId)
+      expect(r1.status).toBe(201)
+      expect(r2.status).toBe(200)
+      expect(r3.status).toBe(429)
+      expect(r3.body.error.code).toBe('RATE_LIMITED')
+    } finally {
+      process.env.RESERVATIONS_RATE_LIMIT = '1000'
+    }
   })
 
   it('cancelar própria reserva libera o lugar; cancelar de outro usuário → 404', async () => {

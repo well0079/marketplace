@@ -271,10 +271,51 @@ export async function createReservation(input: CreateReservationInput) {
   })
   if (!offer) throw new ApiError(404, 'NOT_FOUND', 'Oferta não encontrada')
 
-  const expiresAt = new Date(Date.now() + RESERVATION_TTL_MS)
+  const now = new Date()
+  const expiresAt = new Date(now.getTime() + RESERVATION_TTL_MS)
+  // Regra: NO MÁXIMO 1 reserva ativa por usuário.
+  // - Mesma oferta ativa → REAPROVEITA (renova o TTL, sem criar nova);
+  //   se a oferta dessa reserva já foi decrementada/deixou de existir, a reserva
+  //   é descartada (lazily) e o fluxo segue normal.
+  // - Outra oferta ativa → vira `cancelled` na MESMA transação (libera o estoque dela).
+  const existingActive = await prisma.reservation.findFirst({
+    where: { userId: input.userId, status: 'active', expiresAt: { gt: now } },
+    orderBy: { createdAt: 'desc' },
+    include: { offer: { select: { id: true, quantity: true, status: true } } },
+  })
+  if (existingActive && existingActive.offerId === input.offerId) {
+    if (existingActive.offer.status !== 'active') {
+      // oferta deixou de existir/foi cancelada: descarta a reserva órfã e segue
+      await prisma.reservation.update({ where: { id: existingActive.id }, data: { status: 'cancelled' } })
+    } else {
+      const renewed = await prisma.reservation.update({
+        where: { id: existingActive.id },
+        data: { expiresAt },
+      })
+      return {
+        id: renewed.id,
+        quantity: renewed.quantity,
+        expiresAt: renewed.expiresAt.toISOString(),
+        reused: true,
+        offer: {
+          id: offer.id,
+          ticketType: offer.ticketType,
+          ticketCategory: offer.ticketCategory,
+          priceCents: offer.priceCents,
+          session: { id: offer.session.id, startsAt: offer.session.startsAt.toISOString(), city: offer.session.city, venue: offer.session.venue },
+          event: { slug: offer.session.event.slug, name: offer.session.event.name },
+        },
+      }
+    }
+  }
+
   // Lock da linha da oferta: serializa reservas concorrentes; a disponibilidade é
   // recalculada DENTRO da transação, depois do lock
   const result = await prisma.$transaction(async (tx) => {
+    // cancela a reserva ativa anterior (outra oferta) liberando o estoque dela
+    if (existingActive) {
+      await tx.reservation.update({ where: { id: existingActive.id }, data: { status: 'cancelled' } })
+    }
     await tx.$queryRaw`SELECT "id" FROM "Offer" WHERE "id" = ${offer.id}::uuid FOR UPDATE`
     const active = await tx.reservation.aggregate({
       where: { offerId: offer.id, status: 'active', expiresAt: { gt: new Date() } },

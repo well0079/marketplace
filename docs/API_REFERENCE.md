@@ -96,11 +96,14 @@ Valores monetários em **centavos** (INTEGER) · Erros: `{ error: { code, messag
   `categories:[...]` + `minPriceCents` + `hasOffers` (404)
 - `GET /sessions/:id/offers?type&category` → ofertas ATIVAS com disponibilidade > 0, preço asc:
   `[{ id, ticketType, ticketCategory, priceCents, available, seller: "plataforma"|"vendedor" }]`
-- `POST /reservations` (auth) `{ offerId, quantity? (1–4, padrão 1) }` → 201
-  `{ id, quantity, expiresAt, offer{...} }` · **disponível = quantity − reservas ativas não
-  expiradas**; criação em transação com `SELECT ... FOR UPDATE` na oferta (duas pessoas nunca
-  reservam o último ingresso) · erros: 400 (quantity), 404, 422 OFFER_UNAVAILABLE ·
-  TTL da reserva: **10 minutos** (avaliado por timestamp, sem cron)
+- `POST /reservations` (auth, **rate limit 10/min por usuário** — `RESERVATIONS_RATE_LIMIT`,
+  429 RATE_LIMITED) `{ offerId, quantity? (1–4, padrão 1) }` → **201 criada** ou **200 reutilizada**
+  `{ id, quantity, expiresAt, reused?, offer{...} }` · **disponível = quantity − reservas ativas
+  não expiradas**; criação em transação com `SELECT ... FOR UPDATE` na oferta (duas pessoas nunca
+  reservam o último ingresso) · **no máximo 1 reserva ativa por usuário**: reservar outra oferta
+  cancela a anterior na mesma transação; reservar a MESMA oferta com reserva ativa REAPROVEITA
+  (renova o TTL de **10 minutos** — avaliado por timestamp, sem cron) · erros: 400 (quantity),
+  404, 422 OFFER_UNAVAILABLE
 - `GET /reservations/active` (auth) → reservas ativas não expiradas do usuário
 - `DELETE /reservations/:id` (auth) → `{ ok: true }` (404 de terceiro/inexistente, 422 se não ativa)
 - **POST /orders agora tem DOIS fluxos** (Idempotency-Key obrigatória nos dois):
