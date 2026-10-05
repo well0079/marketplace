@@ -1,6 +1,6 @@
 {
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://MARKETPLACE-API-URL.vercel.app/api/:path*" },
+    { "source": "/api/:path*", "destination": "https://marketplace-api-alpha.vercel.app/api/:path*" },
     { "source": "/:path(.*)", "destination": "/index.html" }
   ]
 }

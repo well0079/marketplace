@@ -39,11 +39,20 @@ function authHeader(): string {
   return `Basic ${Buffer.from(`x:${key}`).toString('base64')}`
 }
 
+// Tipo local do que usamos de fetch: o global `Response` varia entre ambientes
+// (Node/@types/node vs runtime da Vercel) e quebrava o typecheck do builder
+type FetchResponse = {
+  ok: boolean
+  status: number
+  text(): Promise<string>
+  json(): Promise<unknown>
+}
+
 async function request(path: string, init: { method: 'GET' | 'POST'; body?: unknown }): Promise<FastSoftTransaction> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
   try {
-    const res = await fetch(`${API_URL}${path}`, {
+    const res = (await fetch(`${API_URL}${path}`, {
       method: init.method,
       headers: {
         Accept: 'application/json',
@@ -52,7 +61,7 @@ async function request(path: string, init: { method: 'GET' | 'POST'; body?: unkn
       },
       body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
       signal: controller.signal,
-    })
+    })) as unknown as FetchResponse
     if (!res.ok) {
       // A doc mostra { message, statusCode } nos erros de autenticação, mas o corpo
       // de validação pode ter outra forma. Preservamos um TRECHO sanitizado (dígitos

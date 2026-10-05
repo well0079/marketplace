@@ -16,8 +16,11 @@
 - [ ] FASE 12+ — Pós-pagamento: tratamento de REFUNDED/CHARGEDBACK no pedido (hoje só o Payment
       muda), tela de "pagamento em análise" dedicada, notificação de confirmação; cartão/boleto
       (FastSoft suporta — documentado em FASTSOFT.md como pendente).
-- [ ] Cobrança real de teste: só com autorização explícita (não há sandbox; ver riscos em
-      FASTSOFT.md). Webhook exige PUBLIC_API_URL HTTPS público (produção).
+- [x] Deploy de produção (Vercel + Neon) — runbook em docs/DEPLOY.md; URLs em DECISIONS.md.
+- [ ] Pós-competição: ROTAR a FASTSOFT_SECRET_KEY (ficou exposta ao avaliador em produção) e
+      rotacionar AUTH_SECRET de produção.
+- [ ] Cobrança real de R$ 10 em produção (paga pelo dono) para validar o webhook de ponta a ponta;
+      se o painel da FastSoft exigir, cadastrar a URL de postback (docs/DEPLOY.md).
 - [ ] Sessão: stateless — revogação server-side de tokens (ex.: tabela Session) se exigido;
       "Minha conta" (dados pessoais/endereços) ainda não existe como página própria.
 - [ ] Estoque insuficiente via UI: QuantitySelector já limita ao estoque; o 409 do servidor só

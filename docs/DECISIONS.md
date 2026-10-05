@@ -89,3 +89,30 @@ Registro das decisões que NÃO são óbvias pelo código. Datas em 2026.
   igual ou superior ao valor da transação"); produto de teste do seed = R$ 10,00.
 - `pix.qrcode` real = EMV copia e cola (example da doc era base64 PNG ilustrativo).
 - Log do 502 inclui status HTTP + mensagem do provedor com sequências de 5+ dígitos mascaradas.
+
+## DEPLOY — Vercel + Neon (05/10/2026)
+- **Opção A**: dois projetos (marketplace-api → backend/, marketplace-web → frontend/).
+  Motivo: mais determinístico; o navegador só vê a origem do web (cookies same-origin,
+  SameSite=Lax + Secure em produção) e a API nunca é exposta a CORS complexo.
+- **Pipeline da API**: os builders padrão da Vercel falharam de duas formas — (1) o preset
+  "Express" gerava uma rota `404` para sub-paths de /api; (2) o typecheck do @vercel/node
+  rejeitava o global `Response` (types do runtime da Vercel ≠ @types/node) e a função nem
+  era emitida. Solução: **Build Output API montado manualmente** (`scripts/build-api-output.sh`):
+  bundle esbuild do adapter `backend/api/[...path].ts` + client Prisma com engine
+  rhel-openssl-3.0.x embutido no `.func` + rotas explícitas no `config.json`
+  (`/api/v1(/.*)? → /api/v1`). Deploy com `vercel deploy --prebuilt --prod`. O painel não
+  redeploya prebuilt — CLI ou workflow GitHub Actions (deploy-api.yml, requer secret
+  VERCEL_TOKEN).
+- **bodyParser: false** na função (`config.api`) — sem ele a Vercel consome o body antes do
+  Express e o raw body do webhook se perde silenciosamente. Corpo JSON malformado agora
+  responde 400 (INVALID_JSON) e não derruba a função.
+- `trust proxy` + cookie `Secure` em produção (NODE_ENV=production); dev continua sem Secure.
+- **FastSoft**: `externalRef` raiz rejeitado pela API real (400 whitelist) → vínculo
+  pedido↔transação em `metadata` (JSON); CPF/telefone só dígitos; valor mínimo prático = acima
+  da taxa (R$ 1,00 recusado); `pix.qrcode` real = EMV copia-e-cola. Detalhes em FASTSOFT.md.
+- **Segurança**: FASTSOFT_SECRET_KEY MANTIDA no deploy (saiu do .env local apenas para o painel
+  da Vercel, colada pelo dono; nunca em commit/log/CLI). ROTAÇÃO DA CHAVE = pendência
+  pós-competição (TODO). AUTH_SECRET de produção gerado aleatório (32 bytes) e cadastrado via
+  CLI sem exposição.
+- Domínios: marketplace-api-alpha.vercel.app · marketplace-web-khaki.vercel.app (rewrite do web
+  fixa a URL da API em frontend/vercel.json — interpolação de env em `destination` não suportada).
