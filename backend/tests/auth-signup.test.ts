@@ -6,10 +6,35 @@ import { prisma } from '../src/lib/prisma'
 const suffix = Date.now()
 const EMAIL = `cadastro.${suffix}@teste.com`
 const PASSWORD = 'Senha1@segura'
-const CPF = '529.982.247-25'
-const CPF_DIGITS = '52998224725'
-const PHONE_OK = '(11) 98765-4321'
-const PHONE_E164 = '+5511987654321'
+
+// CPF e celular GERADOS por execução: únicos mesmo se uma execução anterior
+// deixar resíduos (a limpeza do beforeAll pode falhar por FK em casos raros)
+function checkDigit(base: string): string {
+  let sum = 0
+  let weight = base.length + 1
+  for (const digit of base) {
+    sum += Number(digit) * weight
+    weight -= 1
+  }
+  const rest = (sum * 10) % 11
+  return String(rest === 10 ? 0 : rest)
+}
+function randomCpf(): string {
+  let base = ''
+  for (let i = 0; i < 9; i++) base += Math.floor(Math.random() * 9)
+  const d1 = checkDigit(base)
+  const d2 = checkDigit(base + d1)
+  return base + d1 + d2
+}
+function maskCpfValue(cpf: string): string {
+  return `***.${cpf.slice(3, 6)}.${cpf.slice(6, 9)}-**`
+}
+const CPF_DIGITS = randomCpf()
+const CPF = `${CPF_DIGITS.slice(0, 3)}.${CPF_DIGITS.slice(3, 6)}.${CPF_DIGITS.slice(6, 9)}-${CPF_DIGITS.slice(9)}`
+const CPF_MASKED = maskCpfValue(CPF_DIGITS)
+const PHONE_DIGITS = `119${String(Math.floor(Math.random() * 100000000)).padStart(8, "0")}`
+const PHONE_OK = `(${PHONE_DIGITS.slice(0, 2)}) ${PHONE_DIGITS.slice(2, 7)}-${PHONE_DIGITS.slice(7)}`
+const PHONE_E164 = `+55${PHONE_DIGITS}`
 
 const cleanupEmails = [EMAIL, `antigo.${suffix}@teste.com`, `outro.${suffix}@teste.com`, `madonna.${suffix}@teste.com`, `outro.cadastro.${suffix}@teste.com`]
 cleanupEmails.push(`invalido.${suffix}.0@teste.com`, `invalido.${suffix}.1@teste.com`, `invalido.${suffix}.2@teste.com`, `invalido.${suffix}.3@teste.com`)
@@ -131,7 +156,7 @@ describe('POST /auth/signup/complete', () => {
     })
     expect(res.status).toBe(201)
     expect(res.body.email).toBe(EMAIL)
-    expect(res.body.cpfMasked).toBe('***.982.247-**')
+    expect(res.body.cpfMasked).toBe(CPF_MASKED)
     // CPF COMPLETO nunca aparece em resposta nenhuma
     expect(res.text).not.toContain(CPF_DIGITS)
     expect(res.text).not.toContain(CPF)
@@ -142,7 +167,7 @@ describe('POST /auth/signup/complete', () => {
 
     const me = await request(app).get('/api/v1/auth/me').set('Cookie', cookie as string)
     expect(me.status).toBe(200)
-    expect(me.body.cpfMasked).toBe('***.982.247-**')
+    expect(me.body.cpfMasked).toBe(CPF_MASKED)
     expect(me.body.isSeller).toBe(false)
 
     const dbUser = await prisma.user.findUnique({ where: { email: EMAIL } })
@@ -255,7 +280,7 @@ describe('Login (e-mail ou celular) e usuário antigo', () => {
   })
 
   it('login com celular mascarado/em outros formatos também funciona', async () => {
-    const login = await request(app).post('/api/v1/auth/login').send({ email: '+5511987654321', password: PASSWORD })
+    const login = await request(app).post('/api/v1/auth/login').send({ email: PHONE_E164, password: PASSWORD })
     expect(login.status).toBe(200)
   })
 

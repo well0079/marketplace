@@ -157,7 +157,7 @@ function OrderDetailContent({ code }: { code: string }) {
                 <PixPaymentCard
                   orderCode={order.code}
                   total={order.total}
-                  defaultName={order.shippingAddress.recipient ?? ''}
+                  defaultName={order.shippingAddress?.recipient ?? ''}
                 />
               </Card>
             )}
@@ -184,14 +184,14 @@ function OrderDetailContent({ code }: { code: string }) {
                 {order.deliveryOption?.label} · {order.deliveryOption?.description}
               </p>
               <Separator />
-              <p className="font-medium text-foreground">{order.shippingAddress.recipient}</p>
+              <p className="font-medium text-foreground">{order.shippingAddress?.recipient}</p>
               <p className="text-muted-foreground">
-                {order.shippingAddress.street}, {order.shippingAddress.number}
-                {order.shippingAddress.complement ? ` — ${order.shippingAddress.complement}` : ''}
+                {order.shippingAddress?.street}, {order.shippingAddress?.number}
+                {order.shippingAddress?.complement ? ` — ${order.shippingAddress.complement}` : ''}
               </p>
               <p className="text-muted-foreground">
-                {order.shippingAddress.district}, {order.shippingAddress.city} - {order.shippingAddress.state} · CEP{' '}
-                {formatZipCode(order.shippingAddress.zipCode)}
+                {order.shippingAddress?.district}, {order.shippingAddress?.city} - {order.shippingAddress?.state} · CEP{' '}
+                {formatZipCode(order.shippingAddress?.zipCode ?? '')}
               </p>
             </Card>
 

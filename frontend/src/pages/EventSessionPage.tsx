@@ -24,6 +24,8 @@ const COMMUNITY_URL = (import.meta.env.VITE_COMMUNITY_URL as string | undefined)
 // organizador/data com ícones, pills outlined e o card "Selecione o ingresso".
 export function EventSessionPage() {
   const { slug, id } = useParams<{ slug: string; id: string }>()
+  const meQuery = useQuery({ queryKey: AUTH_QUERY_KEY, queryFn: fetchCurrentUser })
+  const user = meQuery.data ?? null
 
   useEffect(() => {
     document.title = 'Sessão | Ingressos'
@@ -191,9 +193,9 @@ export function EventSessionPage() {
                   </option>
                 ))}
               </Select>
-              <SessionOffers sessionId={session.id} type={type} category={category} />
+              <SessionOffers sessionId={session.id} type={type} category={category} eventSlug={session.event.slug} />
               <Link
-                to="/sellers/verify"
+                to={user ? '/sellers/verify' : `/login?redirect=${encodeURIComponent(`/event/${session.event.slug}/session/${session.id}`)}`}
                 className="flex h-11 w-full items-center justify-center rounded-t-control bg-[#14151A] text-t-label-strong text-on-ticket-white transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ticket-primary"
               >
                 Vender
@@ -272,7 +274,7 @@ function EmojiSection({ icon, title, text }: { icon: string; title: string; text
 
 // Lista de ofertas da combinação tipo+categoria, menor preço primeiro.
 // "Comprar" cria a reserva (auth) e vai para o checkout; desabilitado sem ofertas.
-function SessionOffers({ sessionId, type, category }: { sessionId: string; type: string; category: string }) {
+function SessionOffers({ sessionId, type, category, eventSlug }: { sessionId: string; type: string; category: string; eventSlug: string }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const offersQuery = useQuery({
@@ -282,6 +284,8 @@ function SessionOffers({ sessionId, type, category }: { sessionId: string; type:
   })
 
   const meQuery = useQuery({ queryKey: AUTH_QUERY_KEY, queryFn: fetchCurrentUser })
+  const user = meQuery.data ?? null
+  const loginRedirect = `/login?redirect=${encodeURIComponent(`/event/${eventSlug}/session/${sessionId}`)}`
 
   const buyMutation = useMutation({
     mutationFn: (offerId: string) => eventsApi.reserve(offerId, 1),
@@ -368,8 +372,14 @@ function SessionOffers({ sessionId, type, category }: { sessionId: string; type:
               <p className="font-sora text-t-price-m text-ticket-text">{formatBRL(offer.priceCents)}</p>
               <button
                 type="button"
-                disabled={buyMutation.isPending}
-                onClick={() => buyMutation.mutate(offer.id)}
+                disabled={buyMutation.isPending && buyMutation.variables === offer.id}
+                onClick={() => {
+                  if (!user) {
+                    navigate(loginRedirect)
+                    return
+                  }
+                  buyMutation.mutate(offer.id)
+                }}
                 className="mt-0.5 rounded-t-control bg-ticket-primary px-4 py-1.5 text-t-label-strong text-on-ticket-white transition-colors hover:bg-ticket-primary-press focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ticket-primary-outline disabled:opacity-50"
               >
                 {buyMutation.isPending && buyMutation.variables === offer.id ? 'Reservando…' : 'Comprar'}
@@ -378,10 +388,9 @@ function SessionOffers({ sessionId, type, category }: { sessionId: string; type:
           </div>
         )
       })}
-      {/* anônimo: compra exige conta (mesma regra do checkout) */}
-      {meQuery.data === null && (
+      {!user && (
         <p className="text-center text-t-caption text-ticket-muted">
-          Para comprar, você precisa estar logado — o botão pedirá sua conta.
+          Para comprar ou vender você precisa entrar — voltamos para cá depois.
         </p>
       )}
     </div>

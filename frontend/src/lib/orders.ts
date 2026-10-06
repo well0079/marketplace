@@ -26,7 +26,9 @@ export type OrderDetail = {
   discount: number
   total: number
   deliveryOption: { id: string; label: string; description: string; region: string; price: number } | null
-  shippingAddress: Record<string, string>
+  shippingAddress: Record<string, string> | null
+  ticketSnapshot: Record<string, unknown> | null
+  activePaymentId: string | null
   items: OrderItemSnapshot[]
   createdAt: string
   cancelledAt: string | null
@@ -39,6 +41,7 @@ export type OrderSummary = {
   createdAt: string
   firstItemImage: string | null
   itemsCount: number
+  ticketSnapshot: Record<string, unknown> | null
 }
 
 export type OrdersPage = {
@@ -64,7 +67,10 @@ export const ordersApi = {
     api.post<OrderDetail>('/orders', { addressId: input.addressId, deliveryOption: input.deliveryOption }, {
       'Idempotency-Key': input.idempotencyKey,
     }),
-  list: (page: number) => api.get<OrdersPage>(`/orders?page=${page}&limit=10`),
+  list: (page: number, kind?: 'ticket' | 'product') => {
+    const kindQuery = kind ? `&kind=${kind}` : ''
+    return api.get<OrdersPage>(`/orders?page=${page}&limit=10${kindQuery}`)
+  },
   byCode: (code: string) => api.get<OrderDetail>(`/orders/${encodeURIComponent(code)}`),
   cancel: (code: string) => api.post<OrderDetail>(`/orders/${encodeURIComponent(code)}/cancel`, {}),
 }

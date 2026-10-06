@@ -70,6 +70,7 @@ export type OrderSummaryPayload = {
   createdAt: string
   firstItemImage: string | null
   itemsCount: number
+  ticketSnapshot: Record<string, unknown> | null
 }
 
 export function generateOrderCode(): string {
@@ -139,6 +140,7 @@ export function toSummaryPayload(order: OrderWithItems): OrderSummaryPayload {
     createdAt: order.createdAt.toISOString(),
     firstItemImage: (order.items[0]?.productSnapshot as { thumbnail?: string | null } | undefined)?.thumbnail ?? null,
     itemsCount: order.items.reduce((sum, item) => sum + item.quantity, 0),
+    ticketSnapshot: (order.ticketSnapshot ?? null) as Record<string, unknown> | null,
   }
 }
 

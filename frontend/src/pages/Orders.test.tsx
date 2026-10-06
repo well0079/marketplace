@@ -54,6 +54,8 @@ const ORDER_DETAIL: OrderDetailData = {
     },
   ],
   createdAt: '2026-10-04T12:00:00.000Z',
+  ticketSnapshot: null,
+  activePaymentId: null,
   cancelledAt: null,
 }
 
@@ -64,6 +66,7 @@ const ORDER_SUMMARY: OrderSummary = {
   createdAt: '2026-10-04T12:00:00.000Z',
   firstItemImage: 'https://picsum.photos/seed/order/200/200',
   itemsCount: 2,
+  ticketSnapshot: { event: { name: 'Festival Aurora 2026' } },
 }
 
 const PAGE = { items: [ORDER_SUMMARY], page: 1, limit: 10, total: 1, totalPages: 1 }

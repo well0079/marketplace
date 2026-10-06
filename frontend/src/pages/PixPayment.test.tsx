@@ -34,6 +34,8 @@ const ORDER_PAID: OrderDetail = {
   shippingAddress: { recipient: 'Ana Silva', street: 'Av Paulista', number: '1' },
   items: [],
   createdAt: '2026-10-05T12:00:00.000Z',
+  ticketSnapshot: null,
+  activePaymentId: null,
   cancelledAt: null,
 }
 

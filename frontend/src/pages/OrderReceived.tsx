@@ -89,7 +89,7 @@ function OrderReceivedContent({ code }: { code: string }) {
           Seu pedido foi registrado. Pague com Pix abaixo — a confirmação aparece automaticamente.
         </Alert>
 
-        {order.status === 'pending' && <PixPaymentCard orderCode={order.code} total={order.total} defaultName={order.shippingAddress.recipient} />}
+        {order.status === 'pending' && <PixPaymentCard orderCode={order.code} total={order.total} defaultName={order.shippingAddress?.recipient ?? ''} />}
 
         <Card className="flex flex-col gap-4 p-5">
           <h2 className="text-h4 text-foreground">Resumo do pedido</h2>
@@ -132,12 +132,12 @@ function OrderReceivedContent({ code }: { code: string }) {
           <div className="flex flex-col gap-1 text-body-small">
             <p className="font-medium text-foreground">Entrega em</p>
             <p className="text-muted-foreground">
-              {order.shippingAddress.street}, {order.shippingAddress.number}
-              {order.shippingAddress.complement ? ` — ${order.shippingAddress.complement}` : ''}
+              {order.shippingAddress?.street}, {order.shippingAddress?.number}
+              {order.shippingAddress?.complement ? ` — ${order.shippingAddress.complement}` : ''}
             </p>
             <p className="text-muted-foreground">
-              {order.shippingAddress.district}, {order.shippingAddress.city} - {order.shippingAddress.state} · CEP{' '}
-              {formatZipCode(order.shippingAddress.zipCode)}
+              {order.shippingAddress?.district}, {order.shippingAddress?.city} - {order.shippingAddress?.state} · CEP{' '}
+              {formatZipCode(order.shippingAddress?.zipCode ?? '')}
             </p>
             <p className="text-caption text-muted-foreground">{order.deliveryOption?.description}</p>
           </div>

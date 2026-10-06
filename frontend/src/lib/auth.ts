@@ -43,3 +43,33 @@ export function validateRegisterForm(values: {
   if (values.confirmPassword !== values.password) fields.confirmPassword = 'As senhas não coincidem.'
   return Object.keys(fields).length > 0 ? fields : null
 }
+
+// ─── Cadastro em 3 passos (tema ingressos) — espelha as regras do backend ───
+
+export type SignupStartPayload = { nextStep: 'verify' | 'account'; token: string; demo?: boolean; code?: string }
+
+export const signupApi = {
+  start: (phone: string) => api.post<SignupStartPayload>('/auth/signup/start', { phone }),
+  verify: (token: string, code: string) => api.post<{ ok: boolean }>('/auth/signup/verify', { token, code }),
+  complete: (input: { token: string; name: string; cpf: string; email: string; password: string; marketing: boolean }) =>
+    api.post<PublicUser & { cpfMasked?: string; isSeller?: boolean }>('/auth/signup/complete', input),
+  status: (token: string) => api.get<{ phone: string; verified: boolean; expired: boolean }>(`/auth/signup/status?token=${encodeURIComponent(token)}`),
+}
+
+// redirect seguro: só caminho relativo interno (começa com "/" e não com "//")
+export function safeRedirect(param: string | null, fallback = '/'): string {
+  if (!param) return fallback
+  if (!param.startsWith('/') || param.startsWith('//') || param.includes('://')) return fallback
+  return param
+}
+
+// Política de senha do backend, expressa como checklist para a UI
+export function passwordChecklist(password: string): { label: string; ok: boolean }[] {
+  return [
+    { label: 'Pelo menos 8 caracteres', ok: password.length >= 8 },
+    { label: '1 número', ok: /[0-9]/.test(password) },
+    { label: '1 letra maiúscula', ok: /[A-Z]/.test(password) },
+    { label: '1 caractere especial', ok: /[^A-Za-z0-9]/.test(password) },
+    { label: 'Sem espaço no início ou fim', ok: password.length === 0 || password === password.trim() },
+  ]
+}
