@@ -212,7 +212,20 @@ async function main() {
     }
   }
 
-  console.log(`Seed ingressos concluído: ${EVENTS.length} eventos, ${sessionCount} sessões, ${offerCount} ofertas.`)
+  await prisma.coupon.upsert({
+    where: { code: 'BEMVINDO10' },
+    update: {},
+    create: {
+      code: 'BEMVINDO10',
+      percentOff: 10,
+      validFrom: new Date(),
+      validTo: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      maxUses: 100,
+      active: true,
+    },
+  })
+
+  console.log(`Seed ingressos concluído: ${EVENTS.length} eventos, ${sessionCount} sessões, ${offerCount} ofertas, cupom BEMVINDO10 (10%).`)
 }
 
 main()

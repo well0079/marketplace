@@ -318,7 +318,7 @@ describe('POST /reservations — reserva com lock', () => {
   })
 
   it('cancelar própria reserva libera o lugar; cancelar de outro usuário → 404', async () => {
-    const fixture = await makeFixture({ quantity: 1, withSeller: true })
+    const fixture = await makeFixture({ quantity: 1 })
     const mine = await reserve(authA, fixture.offerId)
     expect(mine.status).toBe(201)
     const reservationId = mine.body.id

@@ -3,6 +3,7 @@ import { Prisma, type Order } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { ApiError } from '../lib/errors'
 import { shippingQuote } from './shipping.service'
+import { prisma as prismaClient } from '../lib/prisma'
 
 // Pedidos: criação idempotente a partir do carrinho ativo do usuário, com
 // snapshot de itens/endereço/entrega. Totais SEMPRE recalculados no servidor.
@@ -40,9 +41,39 @@ export type TicketOrderSnapshot = {
 }
 
 export const SERVICE_FEE_RATE = 0.1
+const MIN_TOTAL_CENTS = 100 // total mínimo R$ 1,00 (política de cupom)
 
 export function serviceFeeFor(priceCents: number): number {
   return Math.round(priceCents * SERVICE_FEE_RATE)
+}
+
+// Cupom: desconto sobre o PREÇO do ingresso; a taxa de 10% é recalculada sobre o
+// valor com desconto; cupom que deixaria o total abaixo de R$ 1,00 é recusado.
+export function applyCouponToPrice(priceCents: number, percentOff: number): {
+  discountedPriceCents: number
+  discountCents: number
+  serviceFeeCents: number
+  totalCents: number
+} {
+  const discountCents = Math.round((priceCents * Math.min(100, Math.max(0, percentOff))) / 100)
+  const discountedPriceCents = priceCents - discountCents
+  const serviceFeeCents = serviceFeeFor(discountedPriceCents)
+  const totalCents = discountedPriceCents + serviceFeeCents
+  return { discountedPriceCents, discountCents, serviceFeeCents, totalCents }
+}
+
+export async function findValidCouponForPrice(code: string, priceCents: number) {
+  const coupon = await prisma.coupon.findUnique({ where: { code: code.toUpperCase() } })
+  if (!coupon || !coupon.active) return { coupon: null, error: 'Cupom inexistente ou inativo.' }
+  const now = new Date()
+  if (coupon.validFrom > now) return { coupon: null, error: 'Cupom ainda não está válido.' }
+  if (coupon.validTo < now) return { coupon: null, error: 'Cupom expirado.' }
+  if (coupon.maxUses <= coupon.usedCount) return { coupon: null, error: 'Cupom esgotado.' }
+  const prices = applyCouponToPrice(priceCents, coupon.percentOff)
+  if (prices.totalCents < MIN_TOTAL_CENTS) {
+    return { coupon: null, error: 'Este cupom deixaria o total abaixo do mínimo de R$ 1,00.' }
+  }
+  return { coupon, error: null }
 }
 
 export type OrderDetailPayload = {
@@ -332,6 +363,13 @@ export async function cancelOrder(userId: string, code: string): Promise<OrderDe
   if (order.status !== 'pending') {
     throw new ApiError(422, 'INVALID_STATUS', 'Só pedidos aguardando pagamento podem ser cancelados.')
   }
+  // cancelar o pedido libera a reserva ligada (se ainda ativa)
+  if (order.reservationId) {
+    await prisma.reservation.updateMany({
+      where: { id: order.reservationId, status: 'active' },
+      data: { status: 'cancelled' },
+    })
+  }
   const cancelled = await prisma.order.update({
     where: { id: order.id },
     data: { status: 'cancelled', cancelledAt: new Date() },
@@ -346,6 +384,7 @@ export type CreateTicketOrderInput = {
   userId: string
   reservationId: string
   receiptEmail: string | null
+  couponCode?: string
   idempotencyKey: string
 }
 
@@ -396,9 +435,22 @@ export async function createTicketOrder(
   const quantity = reservation.quantity
   const serviceFeeCents = serviceFeeFor(unitPrice) // 10% arredondado ao centavo (por ingresso)
   const subtotal = unitPrice * quantity
-  const total = subtotal + serviceFeeCents * quantity
+  let total = subtotal + serviceFeeCents * quantity
 
-  const ticketSnapshot: TicketOrderSnapshot = {
+  // Cupom (opcional): revalidado no servidor; desconto sobre o preço do ingresso e
+  // taxa de serviço recalculada sobre o valor COM desconto (applyCouponToPrice)
+  let couponId: string | null = null
+  let discount = 0
+  if (input.couponCode) {
+    const { coupon, error } = await findValidCouponForPrice(input.couponCode, unitPrice)
+    if (!coupon) throw new ApiError(422, 'INVALID_COUPON', error ?? 'Cupom inválido.', { coupon: error ?? 'Inválido.' })
+    couponId = coupon.id
+    const couponPrices = applyCouponToPrice(unitPrice, coupon.percentOff)
+    discount = (unitPrice - couponPrices.discountedPriceCents) * quantity
+    total = couponPrices.totalCents * quantity
+  }
+
+  const ticketSnapshot: TicketOrderSnapshot & { discountCents?: number; couponCode?: string } = {
     kind: 'ticket',
     offerId: offer.id,
     reservationId: reservation.id,
@@ -408,9 +460,10 @@ export async function createTicketOrder(
     ticketCategory: offer.ticketCategory,
     unitPriceCents: unitPrice,
     quantity,
-    serviceFeeCents,
+    serviceFeeCents: serviceFeeCents * quantity,
     totalCents: total,
     receiptEmail: input.receiptEmail,
+    ...(couponId ? { discountCents: discount, couponCode: input.couponCode } : {}),
   }
 
   const itemSnapshot = {
@@ -429,10 +482,12 @@ export async function createTicketOrder(
       status: 'pending',
       subtotal,
       shippingCost: 0,
+      discount,
       total,
       // pedido de ingresso: sem endereço/entrega — o snapshot do ingresso carrega tudo
       ticketSnapshot,
       reservationId: reservation.id,
+      couponId,
       idempotencyKey: input.idempotencyKey,
       items: {
         create: [

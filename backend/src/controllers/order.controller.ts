@@ -21,7 +21,8 @@ export async function createOrder(req: Request, res: Response) {
   if (reservationId) {
     const receiptEmailRaw = typeof req.body?.receiptEmail === 'string' ? req.body.receiptEmail.trim().toLowerCase() : ''
     const receiptEmail = receiptEmailRaw === '' ? null : receiptEmailRaw
-    const { order, created } = await orders.createTicketOrder({ userId: user.id, reservationId, receiptEmail, idempotencyKey })
+    const couponCode = typeof req.body?.couponCode === 'string' ? req.body.couponCode.trim() : undefined
+    const { order, created } = await orders.createTicketOrder({ userId: user.id, reservationId, receiptEmail, couponCode, idempotencyKey })
     res.status(created ? 201 : 200).json(order)
     return
   }

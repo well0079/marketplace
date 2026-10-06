@@ -1,6 +1,6 @@
 import { prisma } from '../lib/prisma'
 import { ApiError } from '../lib/errors'
-import { formatZipCode, isValidCpf, maskCpf, onlyDigits } from '../lib/cpf'
+import { formatZipCode, hashCpf, isValidCpf, maskCpf, onlyDigits } from '../lib/cpf'
 import * as fastsoft from '../lib/fastsoft'
 
 // Pagamentos Pix via FastSoft: criação idempotente, sincronização com o provedor
@@ -71,27 +71,25 @@ export function toPaymentPayload(payment: PaymentWithOrder): PaymentPayload {
 
 // Validação pura (testada) dos dados do pagador
 export function validatePayer(payer: unknown): {
-  name: string
   document: string
   phone: string
   fields: Record<string, string>
 } {
   const body = (payer ?? {}) as Record<string, unknown>
   const fields: Record<string, string> = {}
-  const name = typeof body.name === 'string' ? body.name.trim() : ''
+
   const document = onlyDigits(body.document)
   const phone = onlyDigits(body.phone)
-  if (name.length < 2 || name.length > 120) fields.name = 'Informe o nome completo do pagador.'
   if (document.length !== 11 || !isValidCpf(document)) fields.document = 'Informe um CPF válido.'
   if (phone.length < 10 || phone.length > 11) fields.phone = 'Informe um telefone com DDD.'
-  return { name, document, phone, fields }
+  return { document, phone, fields }
 }
 
 type CreatePaymentInput = {
-  user: { id: string; email: string }
+  user: { id: string; email: string; name: string; phone: string | null; cpfHash: string | null }
   orderCode: string
   method: string
-  payer: { name: string; document: string; phone: string }
+  payer: { document: string; phone: string }
   idempotencyKey: string
   ip: string
 }
@@ -133,6 +131,13 @@ export async function createPayment(
 
   // 4) Transação na FastSoft — amount/itens/frete SEMPRE do snapshot do pedido
   const ticket = (order.ticketSnapshot ?? null) as { offerId?: string } | null
+  // O pagador é o dono da conta: nome e telefone vêm da conta; o CPF do formulário
+  // precisa corresponder ao CPF cadastrado (mesmo pepper no hash). Nunca guardado/logado.
+  const accountCpfHash = input.user.cpfHash
+  if (accountCpfHash && hashCpf(input.payer.document) !== accountCpfHash) {
+    throw new ApiError(422, 'CPF_MISMATCH', 'O CPF informado não corresponde ao CPF da sua conta. Confira e tente novamente.')
+  }
+
   const address = (order.shippingAddress ?? null) as Record<string, string> | null
   const postbackUrl = process.env.PUBLIC_API_URL ? `${process.env.PUBLIC_API_URL.replace(/\/$/, '')}/api/v1/webhooks/fastsoft` : undefined
   const transaction = await fastsoft
@@ -141,12 +146,13 @@ export async function createPayment(
       currency: 'BRL',
       paymentMethod: 'PIX',
       customer: {
-        name: input.payer.name,
+        // nome e telefone vêm da CONTA (o formulário não manda)
+        name: input.user.name,
         email: input.user.email,
         // CPF e telefone SÓ com dígitos (ajuste pós-teste real; a validação do
         // provedor rejeitou os valores formatados dos examples)
         document: { number: input.payer.document, type: 'CPF' },
-        phone: input.payer.phone,
+        phone: input.user.phone ?? input.payer.phone,
       },
       shipping: {
         fee: order.shippingCost,

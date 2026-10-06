@@ -271,6 +271,10 @@ export async function createReservation(input: CreateReservationInput) {
     include: { session: { include: { event: { select: { slug: true, name: true } } } } },
   })
   if (!offer) throw new ApiError(404, 'NOT_FOUND', 'Oferta não encontrada')
+  // Não é possível comprar o próprio anúncio
+  if (offer.sellerId && offer.sellerId === input.userId) {
+    throw new ApiError(409, 'OWN_OFFER', 'Este ingresso é seu anúncio — você não pode comprá-lo.')
+  }
 
   const now = new Date()
   const expiresAt = new Date(now.getTime() + RESERVATION_TTL_MS)

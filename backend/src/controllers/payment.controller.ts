@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express'
 import { ApiError } from '../lib/errors'
 import { getSessionUser } from '../lib/auth'
+import { prisma } from '../lib/prisma'
 import { createPayment as createPaymentService, getPaymentForUser, validatePayer } from '../services/payment.service'
 
 // Rate limit simples em memória por usuário (janela de 60s) — protege o provedor
@@ -42,11 +43,17 @@ export async function createPayment(req: Request, res: Response) {
     throw new ApiError(400, 'VALIDATION', 'Verifique os dados do pagador.', payer.fields)
   }
 
+  const fullUser = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { id: true, email: true, name: true, phone: true, cpfHash: true },
+  })
+  if (!fullUser) throw new ApiError(401, 'UNAUTHENTICATED', 'Não autenticado')
+
   const { payload, created } = await createPaymentService({
-    user: { id: user.id, email: user.email },
+    user: { id: fullUser.id, email: fullUser.email, name: fullUser.name, phone: fullUser.phone, cpfHash: fullUser.cpfHash },
     orderCode,
     method,
-    payer: { name: payer.name, document: payer.document, phone: payer.phone },
+    payer: { document: payer.document, phone: payer.phone },
     idempotencyKey,
     ip: req.ip ?? '',
   })

@@ -7,6 +7,7 @@ import { getShippingOptions } from './controllers/shipping.controller'
 import { cancelOrder, createOrder, getOrder, listOrders } from './controllers/order.controller'
 import { createPayment, getPayment } from './controllers/payment.controller'
 import { fastsoftWebhook } from './controllers/webhook.controller'
+import { validateCoupon } from './controllers/coupon.controller'
 import {
   cancelReservation,
   createReservation,
@@ -61,5 +62,6 @@ router.get('/events/:slug', asyncHandler(getEvent))
 router.get('/sessions/:id', asyncHandler(getSession))
 router.get('/sessions/:id/offers', asyncHandler(listSessionOffers))
 router.post('/reservations', asyncHandler(createReservation))
+router.post('/coupons/validate', asyncHandler(validateCoupon))
 router.get('/reservations/active', asyncHandler(listReservations))
 router.delete('/reservations/:id', asyncHandler(cancelReservation))
