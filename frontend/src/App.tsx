@@ -23,6 +23,7 @@ import { SearchPage } from './pages/SearchPage'
 import { TicketsPage } from './pages/TicketsPage'
 import { TicketOrderDetailPage } from './pages/TicketOrderDetailPage'
 import { SellersVerifySoonPage } from './pages/SellersVerifySoonPage'
+import { CheckoutPage } from './pages/CheckoutPage'
 import { TermsPage, PrivacyPage } from './pages/TicketStaticPages'
 import { TicketNotFoundPage as TicketNotFound } from './pages/TicketStaticPages'
 import { TicketShell } from './components/ingressos/TicketShell'
@@ -62,12 +63,12 @@ export function App() {
         <Route path="/cart" element={<Cart />} />
         <Route path="/login-legacy" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/checkout" element={<Checkout />} />
+        <Route path="/checkout-legacy" element={<Checkout />} />
         <Route path="/checkout/pedido-recebido/:code" element={<OrderReceived />} />
         <Route path="/orders" element={<Orders />} />
         <Route path="/orders/:code" element={<OrderDetail />} />
-        <Route path="/payments/:id" element={<PixPayment />} />
-        <Route path="/checkout/success" element={<CheckoutSuccess />} />
+
+
 
         {/* ── Tema ingressos (shell próprio: faixa legal + TopBar 56px + rodapé) ── */}
         <Route element={<TicketShell />}>
@@ -79,6 +80,9 @@ export function App() {
           <Route path="/tickets" element={<TicketsPage />} />
           <Route path="/tickets/:code" element={<TicketOrderDetailPage />} />
           <Route path="/sellers/verify" element={<SellersVerifySoonPage />} />
+          <Route path="/checkout" element={<CheckoutPage />} />
+          <Route path="/payments/:id" element={<PixPayment />} />
+          <Route path="/checkout/success" element={<CheckoutSuccess />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="*" element={<TicketNotFound />} />

@@ -171,3 +171,9 @@ export function categoryGradient(category: string): string {
   const [from, to] = CATEGORY_GRADIENTS[hash % CATEGORY_GRADIENTS.length]
   return `linear-gradient(135deg, ${from} 0%, ${to} 100%)`
 }
+
+// ─── Checkout (tema ingressos) ───
+
+export function cancelReservationApi(reservationId: string) {
+  return api.delete<{ ok: boolean }>(`/reservations/${encodeURIComponent(reservationId)}`)
+}

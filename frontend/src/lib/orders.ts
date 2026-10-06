@@ -131,3 +131,7 @@ export function describeOrderError(error: unknown): {
   }
   return { kind: 'generic', message: 'Não foi possível confirmar o pedido. Tente novamente.', fields: {} }
 }
+
+export function ticketOrdersQueryKey() {
+  return ['orders', 'list', 1, 'ticket'] as const
+}
