@@ -48,7 +48,9 @@ export async function listOrders(req: Request, res: Response) {
   if (!user) throw new ApiError(401, 'UNAUTHENTICATED', 'Não autenticado')
   const page = toInt(req.query.page, 1, 1, 100_000)
   const limit = toInt(req.query.limit, 20, 1, 50)
-  res.json(await orders.listOrders(user.id, page, limit))
+  // kind=ticket → só pedidos de ingresso; kind=product → só carrinho; ausente = todos
+  const kind = req.query.kind === 'ticket' ? 'ticket' : req.query.kind === 'product' ? 'product' : undefined
+  res.json(await orders.listOrders(user.id, page, limit, kind))
 }
 
 export async function getOrder(req: Request, res: Response) {

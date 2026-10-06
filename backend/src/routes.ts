@@ -1,7 +1,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import { getCategories, getHealth, getProduct, listProducts } from './controllers/catalog.controller'
 import { addCartItem, getCart, removeCartItem, updateCartItem } from './controllers/cart.controller'
-import { login, logout, me, register } from './controllers/auth.controller'
+import { login, logout, me, register, signupComplete, signupStart, signupStatus, signupVerify } from './controllers/auth.controller'
 import { createAddress, deleteAddress, listAddresses } from './controllers/address.controller'
 import { getShippingOptions } from './controllers/shipping.controller'
 import { cancelOrder, createOrder, getOrder, listOrders } from './controllers/order.controller'
@@ -38,6 +38,11 @@ router.post('/auth/register', asyncHandler(register))
 router.post('/auth/login', asyncHandler(login))
 router.post('/auth/logout', asyncHandler(logout))
 router.get('/auth/me', asyncHandler(me))
+// Cadastro em 3 passos do tema ingressos (token assinado, sem sessão até concluir)
+router.post('/auth/signup/start', asyncHandler(signupStart))
+router.post('/auth/signup/verify', asyncHandler(signupVerify))
+router.post('/auth/signup/complete', asyncHandler(signupComplete))
+router.get('/auth/signup/status', asyncHandler(signupStatus))
 router.get('/addresses', asyncHandler(listAddresses))
 router.post('/addresses', asyncHandler(createAddress))
 router.delete('/addresses/:id', asyncHandler(deleteAddress))

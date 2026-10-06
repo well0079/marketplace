@@ -58,3 +58,55 @@ export async function getSessionUser(req: Request): Promise<PublicUser | null> {
     select: { id: true, name: true, email: true },
   })
 }
+
+// ─── Cadastro em 3 passos (tema ingressos) ───
+
+const SIGNUP_TTL_MS = 30 * 60 * 1000
+const SIGNUP_PURPOSE = 'signup'
+
+// Token opaco e assinado (HMAC com AUTH_SECRET): carrega só o id do desafio +
+// expiração — o código de verificação NUNCA trafega no token
+export function createSignupToken(challengeId: string): string {
+  const payload = `${SIGNUP_PURPOSE}.${challengeId}.${Date.now() + SIGNUP_TTL_MS}`
+  return `${payload}.${sign(payload)}`
+}
+
+export function verifySignupToken(token: string | null | undefined): string | null {
+  if (!token) return null
+  const parts = token.split('.')
+  if (parts.length !== 4 || parts[0] !== SIGNUP_PURPOSE) return null
+  const [purpose, challengeId, expiresAt, signature] = parts
+  const expected = sign(`${purpose}.${challengeId}.${expiresAt}`)
+  const candidate = Buffer.from(signature)
+  const expectedBuffer = Buffer.from(expected)
+  if (candidate.length !== expectedBuffer.length || !timingSafeEqual(candidate, expectedBuffer)) return null
+  if (!Number.isFinite(Number(expiresAt)) || Number(expiresAt) < Date.now()) return null
+  return challengeId
+}
+
+// Celular BR → E.164 (+55 + 10 ou 11 dígitos). Aceita formatos mascarados.
+export function normalizeBrPhone(value: unknown): string | null {
+  const digits = String(value ?? '').replace(/\D/g, '')
+  const local = digits.startsWith('55') && digits.length >= 12 ? digits.slice(2) : digits
+  if (local.length !== 10 && local.length !== 11) return null
+  if (local.length === 11 && local[2] !== '9') return null
+  if (local.length === 10 && local[2] === '9') return null
+  return `+55${local}`
+}
+
+// Política de senha: 8+, 1 número, 1 maiúscula, 1 especial, sem espaço no início/fim
+export function validatePassword(password: string): string | null {
+  if (typeof password !== 'string' || password.length < 8) return 'A senha deve ter pelo menos 8 caracteres.'
+  if (password !== password.trim()) return 'A senha não pode começar ou terminar com espaço.'
+  if (!/[0-9]/.test(password)) return 'A senha deve ter pelo menos 1 número.'
+  if (!/[A-Z]/.test(password)) return 'A senha deve ter pelo menos 1 letra maiúscula.'
+  if (!/[^A-Za-z0-9]/.test(password)) return 'A senha deve ter pelo menos 1 caractere especial.'
+  return null
+}
+
+// Nome: 2+ palavras
+export function validateFullName(name: string): string | null {
+  const words = String(name ?? '').trim().split(/\s+/).filter(Boolean)
+  if (words.length < 2 || words.some((word) => word.length < 2)) return 'Informe seu nome completo (nome e sobrenome).'
+  return null
+}

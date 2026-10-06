@@ -118,7 +118,8 @@ describe('Auth API', () => {
 
     const me = await request(app).get('/api/v1/auth/me').set('Cookie', authCookie)
     expect(me.status).toBe(200)
-    expect(me.body).toEqual({ id: expect.any(String), name: USER.name, email: USER.email })
+    // me() ganhou cpfMasked/isSeller do tema ingressos (nulos/false para usuários antigos)
+    expect(me.body).toEqual({ id: expect.any(String), name: USER.name, email: USER.email, cpfMasked: null, isSeller: false })
 
     const anonymous = await request(app).get('/api/v1/auth/me')
     expect(anonymous.status).toBe(401)

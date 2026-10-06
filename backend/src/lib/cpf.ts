@@ -47,3 +47,16 @@ export function formatZipCode(digits: string): string {
   const d = onlyDigits(digits).slice(0, 8)
   return d.length === 8 ? `${d.slice(0, 5)}-${d.slice(5)}` : d
 }
+
+import { createHash } from 'node:crypto'
+
+// Hash do CPF para unicidade: sha256(cpf + pepper). O pepper vem de
+// CPF_HASH_PEPPER; o fallback é só para dev e está DOCUMENTADO — em produção
+// definir a env (a troca invalida hashes existentes).
+function cpfPepper(): string {
+  return process.env.CPF_HASH_PEPPER ?? 'dev-only-cpf-pepper-change-me'
+}
+
+export function hashCpf(digits: string): string {
+  return createHash('sha256').update(onlyDigits(digits) + cpfPepper()).digest('hex')
+}

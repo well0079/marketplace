@@ -56,6 +56,8 @@ export type OrderDetailPayload = {
   deliveryOption: { id: string; label: string; description: string; region: string; price: number } | null
   shippingAddress: Record<string, string> | null
   ticketSnapshot: Record<string, unknown> | null
+  // pagamento Pix ativo (WAITING_PAYMENT/PROCESSING) — usado pelo link "Pagar" em /tickets
+  activePaymentId: string | null
   items: OrderItemSnapshot[]
   createdAt: string
   cancelledAt: string | null
@@ -79,8 +81,11 @@ export function generateOrderCode(): string {
 
 type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }>
 
-function toDetailPayload(order: OrderWithItems): OrderDetailPayload {
+function toDetailPayload(order: OrderWithItems & { payments?: { id: string; status: string }[] }): OrderDetailPayload {
   const delivery = (order.deliveryOption ?? null) as OrderDetailPayload['deliveryOption'] | null
+  const activePayment = order.payments?.find(
+    (payment) => payment.status === 'WAITING_PAYMENT' || payment.status === 'PROCESSING',
+  )
   return {
     code: order.code,
     status: order.status as OrderStatus,
@@ -92,6 +97,7 @@ function toDetailPayload(order: OrderWithItems): OrderDetailPayload {
     deliveryOption: delivery,
     shippingAddress: (order.shippingAddress ?? null) as Record<string, string> | null,
     ticketSnapshot: (order.ticketSnapshot ?? null) as Record<string, unknown> | null,
+    activePaymentId: activePayment?.id ?? null,
     items: order.items.map((item): OrderItemSnapshot => {
       const snapshot = item.productSnapshot as Record<string, unknown>
       // Item de ingresso (sem variante): o snapshot completo vive em ticketSnapshot
@@ -147,7 +153,7 @@ type CreateOrderInput = {
 export async function createOrder(input: CreateOrderInput): Promise<{ order: OrderDetailPayload; created: boolean }> {
   // Idempotência primeiro: mesma key + mesmo usuário devolve o pedido original
   // (a key é única global no schema; key igual de OUTRO usuário é conflito 409)
-  const existing = await prisma.order.findUnique({ where: { idempotencyKey: input.idempotencyKey }, include: { items: true } })
+  const existing = await prisma.order.findUnique({ where: { idempotencyKey: input.idempotencyKey }, include: { items: true, payments: true } })
   if (existing) {
     if (existing.userId !== input.userId) {
       throw new ApiError(409, 'IDEMPOTENCY_CONFLICT', 'Esta chave de idempotência já está em uso.')
@@ -285,14 +291,15 @@ export async function createOrder(input: CreateOrderInput): Promise<{ order: Ord
   })
 
   // Releitura fora da transação para devolver o detalhe completo com itens
-  const detail = await prisma.order.findUnique({ where: { idempotencyKey: input.idempotencyKey }, include: { items: { orderBy: { createdAt: 'asc' } } } })
+  const detail = await prisma.order.findUnique({ where: { idempotencyKey: input.idempotencyKey }, include: { items: { orderBy: { createdAt: 'asc' } }, payments: true } })
   return { order: detail ? toDetailPayload(detail) : order, created: true }
 }
 
-export async function listOrders(userId: string, page: number, limit: number) {
+export async function listOrders(userId: string, page: number, limit: number, kind?: 'ticket' | 'product') {
+  const kindWhere: Prisma.OrderWhereInput = kind === 'ticket' ? { ticketSnapshot: { not: Prisma.AnyNull } } : kind === 'product' ? { ticketSnapshot: { equals: Prisma.AnyNull } } : {}
   const [orders, total] = await Promise.all([
     prisma.order.findMany({
-      where: { userId },
+      where: { userId, ...kindWhere },
       orderBy: { createdAt: 'desc' },
       skip: (page - 1) * limit,
       take: limit,
@@ -312,7 +319,7 @@ export async function listOrders(userId: string, page: number, limit: number) {
 // Usuário só enxerga os PRÓPRIOS pedidos: pedido de outro usuário é 404
 // (mesmo contrato de carrinho/endereço — recurso inexistente para quem pergunta)
 export async function getOrderByCode(userId: string, code: string): Promise<OrderDetailPayload> {
-  const order = await prisma.order.findFirst({ where: { code, userId }, include: { items: { orderBy: { createdAt: 'asc' } } } })
+  const order = await prisma.order.findFirst({ where: { code, userId }, include: { items: { orderBy: { createdAt: 'asc' } }, payments: true } })
   if (!order) throw new ApiError(404, 'NOT_FOUND', 'Pedido não encontrado')
   return toDetailPayload(order)
 }
@@ -326,7 +333,7 @@ export async function cancelOrder(userId: string, code: string): Promise<OrderDe
   const cancelled = await prisma.order.update({
     where: { id: order.id },
     data: { status: 'cancelled', cancelledAt: new Date() },
-    include: { items: { orderBy: { createdAt: 'asc' } } },
+    include: { items: { orderBy: { createdAt: 'asc' } }, payments: true },
   })
   return toDetailPayload(cancelled)
 }
@@ -347,7 +354,7 @@ export async function createTicketOrder(
 ): Promise<{ order: OrderDetailPayload; created: boolean }> {
   // Idempotência idêntica à do carrinho: mesma key + mesmo usuário devolve o
   // pedido original (a unique é global no schema; key de outro usuário = 409)
-  const existing = await prisma.order.findUnique({ where: { idempotencyKey: input.idempotencyKey }, include: { items: true } })
+  const existing = await prisma.order.findUnique({ where: { idempotencyKey: input.idempotencyKey }, include: { items: true, payments: true } })
   if (existing) {
     if (existing.userId !== input.userId) {
       throw new ApiError(409, 'IDEMPOTENCY_CONFLICT', 'Esta chave de idempotência já está em uso.')
@@ -439,5 +446,6 @@ export async function createTicketOrder(
     },
   })
 
-  return { order: toDetailPayload({ ...created, items: await prisma.orderItem.findMany({ where: { orderId: created.id } }) }), created: true }
+  const items = await prisma.orderItem.findMany({ where: { orderId: created.id } })
+  return { order: toDetailPayload({ ...created, items, payments: [] }), created: true }
 }

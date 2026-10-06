@@ -14,7 +14,6 @@ model User {
   name         String
   email        String   @unique
   passwordHash String
-  phone        String?
   role         String   @default("customer")
   status       String   @default("active")
   createdAt    DateTime @default(now())
@@ -27,6 +26,25 @@ model User {
   questions Question[]
   offers        Offer[]
   reservations  Reservation[]
+  // Tema ingressos: celular verificado em E.164 e CPF só mascarado + hash (nunca completo)
+  phone           String?   @unique
+  phoneVerifiedAt DateTime?
+  cpfMasked       String?
+  cpfHash         String?   @unique
+  marketingOptIn  Boolean   @default(false)
+}
+
+// Desafio do cadastro em 3 passos (sem sessão até concluir): código hashado no
+// servidor (nunca dentro do token), expira em 10 min, máx. 5 tentativas
+model SignupChallenge {
+  id         String    @id @default(uuid()) @db.Uuid
+  phone      String
+  codeHash   String?
+  attempts   Int       @default(0)
+  verifiedAt DateTime?
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+  @@index([phone])
 }
 
 model Address {
