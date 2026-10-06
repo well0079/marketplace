@@ -123,3 +123,26 @@ Valores monetários em **centavos** (INTEGER) · Erros: `{ error: { code, messag
 ## Formato do código do pedido
 `RD-` + 8 caracteres de `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (sem I/O/0/1), aleatórios via
 `node:crypto` (não sequenciais), com retry em colisão de unique.
+
+## Conta do tema ingressos (bloco 3a)
+- `POST /auth/signup/start` `{phone}` → valida BR e normaliza para E.164 (+55…); cria desafio
+  com token HMAC de 30 min. `PHONE_VERIFICATION_MODE` (padrão `off`):
+  `off` → `{nextStep:"account", token}` (pula o código) · `demo` → `{nextStep:"verify", token,
+  demo:true, code}` (código NO CORPO para a UI — nunca é envio real) · `sms` → **501
+  SMS_NOT_AVAILABLE** (sem provedor).
+- `POST /auth/signup/verify` `{token, code}` → código hashado no servidor (sha256 + pepper),
+  máx. **5 tentativas** (429 TOO_MANY_ATTEMPTS), comparação tempo constante; desafio expira
+  com o token (30 min).
+- `POST /auth/signup/complete` `{token, name, cpf, email, password, marketing?}` → valida
+  nome (2+ palavras), CPF com dígito verificador, e-mail e senha (8+, 1 número, 1 maiúscula,
+  1 especial, sem espaço nas pontas). Cria usuário com `phone` (E.164 único),
+  `phoneVerifiedAt`, `cpfMasked` (`***.982.247-**`), `cpfHash` (sha256(cpf+CPF_HASH_PEPPER),
+  único), `marketingOptIn` e abre sessão. **Duplicidade de e-mail/CPF/celular → 409
+  ACCOUNT_CREATE_FAILED GENÉRICO** (nunca diz o campo).
+- `POST /auth/login` aceita `{email, password}` onde email = e-mail OU celular (formatos
+  mascarados são normalizados no servidor). Rate limit por IP+identificador
+  (`LOGIN_RATE_LIMIT`, 10/min).
+- `GET /auth/me` → `{ id, name, email, cpfMasked, isSeller }`.
+- `GET /orders?kind=ticket` → só pedidos de ingresso (`kind=product` → só carrinho); o detalhe
+  de pedido inclui `activePaymentId` (Pix ativo) e `ticketSnapshot`.
+- Rate limits por env: `SIGNUP_RATE_LIMIT` (start/verify/complete), `LOGIN_RATE_LIMIT`.

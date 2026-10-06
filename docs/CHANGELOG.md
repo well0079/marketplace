@@ -1,5 +1,22 @@
 # CHANGELOG
 
+## ETAPA 2+3 — bloco 3 (branch `ingressos`): conta, shell, /tickets e rodapé
+- Backend (3a): cadastro em 3 passos (`signup/start|verify|complete`) com token HMAC de 30 min
+  e desafio em banco (código hashado, 5 tentativas, tempo constante); modos de verificação
+  off/demo/sms (501 real); celular E.164 único, CPF mascarado+hash com pepper; login aceita
+  celular; rate limits por env; `/auth/me` com cpfMasked+isSeller; `/orders?kind=ticket` e
+  `activePaymentId` no detalhe. Migration `user_account_fields` + SignupChallenge.
+- Frontend (3b): shell próprio nas rotas de ingressos (faixa legal, alerta por env, TopBar 56px
+  com BrandLogo/buscab/dropdown acessível, rodapé "Compra Garantida"), `/signup` em 3 passos
+  (máscaras, checklist de senha ao vivo, demo banner), `/login` (e-mail ou celular), `/search`
+  mínimo, `/tickets` com abas por teclado + `/tickets/:code` (com "Aguardando transferência"),
+  `/sellers/verify` (em breve), 404 temático, Comprar/Vender com auth-gate e redirect seguro.
+- Testes: backend +19 (auth-signup: 3 modos, tentativas/expiração, duplicidade genérica,
+  login por celular, usuário antigo); frontend +14 com Testing Library (wizard nos 3 modos,
+  checklist, dropdown por teclado, abas, redirect, 404). Suíte: 253 testes.
+- Validação no navegador: cadastro demo/off, logout, login por celular, Comprar anônimo →
+  login → volta à sessão, /tickets com estado vazio; 390px sem overflow. VISUAL_QA.md criado.
+
 ## FASE 11 — Pagamento Pix FastSoft: cobrança, webhook verificado e confirmação (2026-10-05)
 - Backend: client isolado `lib/fastsoft.ts` (Basic auth `x:CHAVE`, timeout 15s, sem logar
   chave/payload; contratos lidos na doc oficial — criar/obter transação, webhook). `POST /payments`

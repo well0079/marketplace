@@ -123,3 +123,18 @@ Registro das decisões que NÃO são óbvias pelo código. Datas em 2026.
   `metadata.orderCode`; rejeição loga o externalRef da gateway. Teste de regressão dedicado.
 - Ensinamento: a conferência de referência era rígida demais para o contrato real; amount +
   metadata + vínculo por providerTransactionId mantêm a proteção.
+### Bloco 3 — conta do tema ingressos (decisões)
+- **Modo de verificação de celular**: `PHONE_VERIFICATION_MODE=off|demo|sms` (padrão off).
+  `off` pula o código; `demo` devolve o código no corpo (banner "Modo demonstração");
+  `sms` responde 501 — NUNCA simulamos envio. Provedor real fica pendente (TODO).
+- **Política de CPF**: completo recebido uma vez, validado por dígito verificador e guardado
+  SÓ como `cpfMasked` + `cpfHash` (sha256 com pepper `CPF_HASH_PEPPER`; fallback documentado
+  para dev). Hash único garante unicidade sem expor o número. O CPF completo nunca volta em
+  resposta e nunca é logado.
+- **Mensagens genéricas**: duplicidade no signup → 409 `ACCOUNT_CREATE_FAILED` com texto fixo
+  ("Se você já tem conta, entre."), sem revelar o campo — login também é genérico.
+- **Token de cadastro**: HMAC (AUTH_SECRET) com purpose `signup`, 30 min, carrega só o id do
+  desafio; o código fica hashado no servidor (`SignupChallenge`) — nada sensível no token.
+- **Login por celular**: aceita e-mail ou celular (normalizado no servidor); redirect validado
+  no frontend por `safeRedirect` (só caminho interno relativo).
+- **TopBar 56px**: instrução do bloco 3 venceu (o audit mediu 78px) — divergência em VISUAL_QA.
