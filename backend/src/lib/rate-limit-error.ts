@@ -5,7 +5,7 @@ import { checkRateLimit, rateLimitFromEnv } from './rate-limit'
 // livre de dependência do Express para testes diretos)
 export function enforceRateLimit(key: string, limit: number, code = 'RATE_LIMITED', message?: string): void {
   try {
-    checkRateLimit(key, limit, code, message)
+    checkRateLimit(key, limit)
   } catch {
     throw new ApiError(429, code, message ?? 'Muitas tentativas. Aguarde um instante e tente de novo.')
   }

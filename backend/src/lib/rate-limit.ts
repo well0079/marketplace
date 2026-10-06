@@ -5,12 +5,7 @@
 const WINDOW_MS = 60_000
 const buckets = new Map<string, number[]>()
 
-export function checkRateLimit(
-  key: string,
-  limit: number,
-  code = 'RATE_LIMITED',
-  message = 'Muitas tentativas. Aguarde um instante e tente de novo.',
-): void {
+export function checkRateLimit(key: string, limit: number): void {
   const now = Date.now()
   const hits = (buckets.get(key) ?? []).filter((timestamp) => now - timestamp < WINDOW_MS)
   if (hits.length >= limit) {
