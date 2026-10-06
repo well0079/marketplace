@@ -3,7 +3,6 @@ import { Prisma, type Order } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { ApiError } from '../lib/errors'
 import { shippingQuote } from './shipping.service'
-import { prisma as prismaClient } from '../lib/prisma'
 
 // Pedidos: criação idempotente a partir do carrinho ativo do usuário, com
 // snapshot de itens/endereço/entrega. Totais SEMPRE recalculados no servidor.
