@@ -4,6 +4,9 @@
 // parseia o corpo normalmente (express.json no app). req.url chega com o caminho
 // completo (/api/v1/...), que casa com as rotas existentes.
 import { app } from '../src/app'
+import { assertProductionEnv } from '../src/lib/env'
+
+assertProductionEnv()
 
 export default app
 

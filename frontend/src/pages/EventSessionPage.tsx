@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiClientError } from '../lib/api'
+import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AUTH_QUERY_KEY, fetchCurrentUser } from '../lib/auth'
 import {
   categoryGradient,
@@ -276,7 +276,6 @@ function EmojiSection({ icon, title, text }: { icon: string; title: string; text
 // "Comprar" cria a reserva (auth) e vai para o checkout; desabilitado sem ofertas.
 function SessionOffers({ sessionId, type, category, eventSlug }: { sessionId: string; type: string; category: string; eventSlug: string }) {
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
   const offersQuery = useQuery({
     queryKey: sessionOffersQueryKey(sessionId, type, category),
     queryFn: () => eventsApi.offers(sessionId, { type, category }),
@@ -287,15 +286,11 @@ function SessionOffers({ sessionId, type, category, eventSlug }: { sessionId: st
   const user = meQuery.data ?? null
   const loginRedirect = `/login?redirect=${encodeURIComponent(`/event/${eventSlug}/session/${sessionId}`)}`
 
-  const buyMutation = useMutation({
-    mutationFn: (offerId: string) => eventsApi.reserve(offerId, 1),
-    onSuccess: (reservation) => {
-      queryClient.invalidateQueries({ queryKey: ['events'] })
-      navigate(`/checkout?offer=${encodeURIComponent(reservation.offer.id)}`)
-    },
-  })
-
-  const buyError = buyMutation.error instanceof ApiClientError ? buyMutation.error : null
+  // BLOCO 4a: Comprar APENAS navega para o checkout — a reserva é criada lá,
+  // ao confirmar o modal (nunca aqui). queryClient deixou de ser necessário.
+  function goToCheckout(offerId: string) {
+    navigate(`/checkout?offer=${encodeURIComponent(offerId)}`)
+  }
 
   if (type === '' || category === '') {
     return (
@@ -347,11 +342,6 @@ function SessionOffers({ sessionId, type, category, eventSlug }: { sessionId: st
 
   return (
     <div className="flex flex-col gap-2">
-      {buyError && (
-        <p role="alert" className="rounded-t-control bg-ticket-danger-soft px-3 py-2 text-t-caption text-ticket-danger">
-          {buyError.message}
-        </p>
-      )}
       {offers.map((offer, index) => {
         const isPlatform = offer.seller === 'plataforma'
         return (
@@ -372,17 +362,16 @@ function SessionOffers({ sessionId, type, category, eventSlug }: { sessionId: st
               <p className="font-sora text-t-price-m text-ticket-text">{formatBRL(offer.priceCents)}</p>
               <button
                 type="button"
-                disabled={buyMutation.isPending && buyMutation.variables === offer.id}
                 onClick={() => {
                   if (!user) {
                     navigate(loginRedirect)
                     return
                   }
-                  buyMutation.mutate(offer.id)
+                  goToCheckout(offer.id)
                 }}
-                className="mt-0.5 rounded-t-control bg-ticket-primary px-4 py-1.5 text-t-label-strong text-on-ticket-white transition-colors hover:bg-ticket-primary-press focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ticket-primary-outline disabled:opacity-50"
+                className="mt-0.5 rounded-t-control bg-ticket-primary px-4 py-1.5 text-t-label-strong text-on-ticket-white transition-colors hover:bg-ticket-primary-press focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ticket-primary-outline"
               >
-                {buyMutation.isPending && buyMutation.variables === offer.id ? 'Reservando…' : 'Comprar'}
+                Comprar
               </button>
             </div>
           </div>

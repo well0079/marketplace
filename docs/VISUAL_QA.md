@@ -15,7 +15,7 @@ Data: 2026-10-05 · Viewports: 1366×900, 390×844, 360×740 · Screenshots em `
 | 404 (shell ingressos) | estado vazio com volta para a home | — | ✅ OK |
 
 ## Divergências restantes (documentadas, intencionais/pendentes)
-1. **TopBar 56px** conforme instrução do bloco 3 — o audit mediu **78px** no site de referência. Ajustar é uma linha (`h-14` → `min-h-[78px]`) quando decidido.
+1. ✅ RESOLVIDO no bloco 4a: TopBar agora usa as medidas auditadas (**78px desktop / 66px mobile**).
 2. **Fonte do corpo**: páginas novas usam `font-hanken`; títulos Lexend — igual ao audit. A faixa legal usa a fonte base (nano) como na referência.
 3. **Hero do evento**: usamos **gradiente por categoria** (placeholders) no lugar da imagem desfocada real — a estrutura (largura total, blur/grayscale, card sobreposto) segue a referência.
 4. **Shell duplo eliminado**: o Header do marketplace não aparece mais nas rotas de ingressos (`usesTicketShell` no App.tsx); o marketplace antigo segue funcionando nas rotas dele sem links cruzados.

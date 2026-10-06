@@ -3,8 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { cn } from '../../lib/cn'
 import { BrandLogo } from './BrandLogo'
 
-// TopBar do tema ingressos: 56px (instrução do bloco 3; o audit mediu 78px no
-// site de referência — divergência registrada em docs/VISUAL_QA.md).
+// TopBar do tema ingressos: 78px desktop / 66px mobile (medidas do audit,
+// docs/DESIGN_AUDIT.md; ajustado no bloco 4a conforme instrução).
 // Deslogado: "Entrar" (cinza) + "Anunciar" (primário). Logado: avatar com inicial
 // + nome truncado em dropdown acessível (Esc/setas/clique fora, foco devolvido).
 export function TopBar({ user, onLogout }: { user: { name: string; email: string } | null; onLogout?: () => void }) {
@@ -46,8 +46,8 @@ export function TopBar({ user, onLogout }: { user: { name: string; email: string
   const initial = user?.name?.trim()?.charAt(0)?.toUpperCase() ?? ''
 
   return (
-    <header className="bg-ticket-primary">
-      <div className="mx-auto flex h-14 max-w-[1200px] items-center gap-2.5 px-2">
+    <header className="bg-ticket-primary md:min-h-[78px]">
+      <div className="mx-auto flex min-h-[66px] max-w-[1200px] items-center gap-2.5 px-2 py-2 md:min-h-[78px]">
         <BrandLogo />
         <form
           role="search"
