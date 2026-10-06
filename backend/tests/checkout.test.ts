@@ -23,11 +23,9 @@ const USER_B = { name: 'Sofia Checkout', email: `sofia.checkout.${suffix}@teste.
 const CPF_A = '529.982.247-25'
 const CPF_DIGITS_A = '52998224725'
 const PHONE_DIGITS_A = '11987654321'
-const PAYER = { document: CPF_A, phone: '(11) 98765-4321' }
 
 let authA: string
 let authB: string
-let authACookie: string[]
 let userAId: string
 const createdEventIds: string[] = []
 const createdCouponIds: string[] = []
@@ -113,7 +111,6 @@ beforeAll(async () => {
   process.env.RESERVATIONS_RATE_LIMIT = '1000'
   const regA = await request(app).post('/api/v1/auth/register').send(USER_A)
   authA = authCookieFrom(regA)
-  authACookie = [authA]
   const regB = await request(app).post('/api/v1/auth/register').send(USER_B)
   authB = authCookieFrom(regB)
   const userA = await prisma.user.findUnique({ where: { email: USER_A.email } })
@@ -246,7 +243,6 @@ describe('POST /payments — CPF do pagador deve bater com a conta', () => {
       where: { id: created.body.id },
       data: { expiresAt: new Date(Date.now() - 1000) },
     })
-    const expPayer = { document: CPF_DIGITS_A, phone: PHONE_DIGITS_A }
     createTransaction.mockResolvedValue({
       id: `tx-exp-ok-${suffix}`,
       amount: order.body.total,
