@@ -1,6 +1,6 @@
 import { api, ApiClientError } from './api'
 
-export type PublicUser = { id: string; name: string; email: string }
+export type PublicUser = { id: string; name: string; email: string; cpfMasked?: string | null; isSeller?: boolean }
 
 export const AUTH_QUERY_KEY = ['auth', 'me'] as const
 
