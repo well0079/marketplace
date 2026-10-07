@@ -116,6 +116,10 @@ function CheckoutContent({ offerId }: CheckoutContentProps) {
   const [cpfModalOpen, setCpfModalOpen] = useState(false)
   const [cpfInput, setCpfInput] = useState('')
   const [cpfError, setCpfError] = useState<string | null>(null)
+  const [couponOpen, setCouponOpen] = useState(false)
+  const [couponInput, setCouponInput] = useState('')
+  const [couponApplied, setCouponApplied] = useState<{ code: string; discountCents: number } | null>(null)
+  const [couponError, setCouponError] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
 
   const expiresAt = reservation?.expiresAt ? new Date(reservation.expiresAt).getTime() : null
@@ -140,7 +144,7 @@ function CheckoutContent({ offerId }: CheckoutContentProps) {
       fetch('/api/v1/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
-        body: JSON.stringify({ reservationId: reservation?.id, receiptEmail }),
+        body: JSON.stringify({ reservationId: reservation?.id, receiptEmail, couponCode: couponApplied?.code }),
       }).then(async (r) => {
         const body = await r.json()
         if (!r.ok) throw Object.assign(new Error(body?.error?.message ?? 'Erro'), { status: r.status, code: body?.error?.code })
@@ -160,6 +164,30 @@ function CheckoutContent({ offerId }: CheckoutContentProps) {
         return body as { paymentId: string }
       }),
   })
+
+  const couponMutation = useMutation({
+    mutationFn: () =>
+      fetch('/api/v1/coupons/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: couponInput.trim(), reservationId: reservation?.id }),
+      }).then(async (r) => {
+        const body = await r.json()
+        if (!r.ok) throw Object.assign(new Error(body?.error?.message ?? 'Cupom inválido'), { status: r.status })
+        return body as { code: string; discountedPriceCents: number; serviceFeeCents: number; totalCents: number }
+      }),
+    onSuccess: (data) => {
+      setCouponApplied({ code: data.code, discountCents: priceCents - data.discountedPriceCents })
+      setCouponError(null)
+    },
+    onError: (error) => setCouponError(error instanceof Error ? error.message : 'Cupom inválido.'),
+  })
+
+  function removeCoupon() {
+    setCouponApplied(null)
+    setCouponInput('')
+    setCouponError(null)
+  }
 
   async function handlePay() {
     if (!reservation || !receiptEmail) return
@@ -187,10 +215,11 @@ function CheckoutContent({ offerId }: CheckoutContentProps) {
   const isPaying = orderMutation.isPending || paymentMutation.isPending
   const canPay = !!receiptEmail && !expired && !isPaying
 
-  // cálculo de valores
+  // cálculo de valores (com cupom quando ativo)
   const priceCents = offerData?.priceCents ?? reservation?.offer.priceCents ?? 0
-  const fee = Math.round(priceCents * 0.1)
-  const total = priceCents + fee
+  const discountedPrice = couponApplied ? priceCents - couponApplied.discountCents : priceCents
+  const fee = Math.round(discountedPrice * 0.1)
+  const total = discountedPrice + fee
 
   return (
     <main className="mx-auto w-full max-w-[720px] px-4 pb-12 font-hanken">
@@ -262,6 +291,56 @@ function CheckoutContent({ offerId }: CheckoutContentProps) {
         </div>
       </section>
 
+      {/* CUPOM */}
+      {reservation && !expired && (
+        <div className="mt-4">
+          {couponApplied ? (
+            <div className="flex items-center justify-between rounded-t-control bg-ticket-accent-soft px-3 py-2">
+              <span className="text-t-caption-strong text-ticket-success">
+                Cupom {couponApplied.code} −{formatBRL(couponApplied.discountCents)}
+              </span>
+              <button type="button" onClick={removeCoupon} className="text-t-caption text-ticket-danger underline">
+                Remover
+              </button>
+            </div>
+          ) : couponOpen ? (
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                <input
+                  value={couponInput}
+                  onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                  placeholder="Código do cupom"
+                  aria-label="Código do cupom"
+                  className="h-10 flex-1 rounded-t-control border border-ticket-border bg-surface px-3 text-t-body-s text-ticket-text uppercase placeholder:text-ticket-faint focus:outline-none focus:ring-2 focus:ring-ticket-primary-outline"
+                />
+                <button
+                  type="button"
+                  disabled={!couponInput.trim() || couponMutation.isPending}
+                  onClick={() => couponMutation.mutate()}
+                  className="h-10 rounded-t-control bg-ticket-primary px-3 text-t-caption-strong text-on-ticket-white disabled:opacity-50"
+                >
+                  {couponMutation.isPending ? '…' : 'Aplicar'}
+                </button>
+              </div>
+              {couponError && <p className="text-t-caption text-ticket-danger">{couponError}</p>}
+              <button type="button" onClick={() => setCouponOpen(false)} className="self-start text-t-caption text-ticket-muted underline">
+                Cancelar
+              </button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => setCouponOpen(true)} className="text-t-caption text-ticket-primary underline">
+              Tem cupom? Adicionar cupom
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* RESUMO SIMPLES */}
+      <div className="mt-4 flex items-baseline justify-between rounded-t-control bg-surface px-3 py-2 shadow-t-row">
+        <span className="text-t-label">Valor total</span>
+        <span className="font-sora text-t-total text-ticket-primary">{formatBRL(total)}</span>
+      </div>
+
       {/* AVISO AMBAR + BOTÃO PAGAR */}
       <div className="mt-6 rounded-t-card bg-ticket-caution-soft p-3 text-t-caption text-ticket-caution-text">
         Marketplace de revenda: os ingressos são de vendedores independentes e os preços são definidos por eles.
@@ -272,7 +351,7 @@ function CheckoutContent({ offerId }: CheckoutContentProps) {
         onClick={() => setCpfModalOpen(true)}
         className="mt-3 h-12 w-full rounded-t-pill bg-ticket-primary text-t-label-strong text-on-ticket-white transition-colors hover:bg-ticket-primary-press focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ticket-primary-outline disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {isPaying ? 'Processando…' : `Pagar${priceCents > 0 ? ` ${formatBRL(total)}` : ''}`}
+        {isPaying ? 'Processando…' : 'Pagar'}
       </button>
       <p className="mt-2 text-center text-t-nano text-ticket-faint">
         Ao pagar você concorda com os{' '}
