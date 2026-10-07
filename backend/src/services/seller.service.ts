@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { ApiError } from '../lib/errors'
-import { onlyDigits } from './cpf'
+import { onlyDigits } from '../lib/cpf'
 
 // Vendedor e anúncios (tema ingressos, bloco 5b). Verificação "básica":
 // consentimento + endereço de cobrança. Sem KYC/biometria/repasse.
@@ -207,13 +207,8 @@ export async function cancelListing(userId: string, listingId: string) {
   if (listing.status !== 'active' && listing.status !== 'pending_review') {
     throw new ApiError(422, 'INVALID_STATUS', 'Este anúncio não pode mais ser cancelado.')
   }
-  // 409 se houver reserva ativa
-  const activeReservations = await prisma.reservation.count({
-    where: { offer: { some: { id: listing.id } }, status: 'active', expiresAt: { gt: new Date() } },
-  })
-  if (activeReservations > 0) {
-    throw new ApiError(409, 'RESERVATION_ACTIVE', 'Há uma reserva ativa neste anúncio. Aguarde a expiração.')
-  }
+  // TODO(bloco 5): quando o Listing criar uma Offer correspondente, verificar
+  // se há reserva ativa nessa oferta antes de cancelar
   await prisma.listing.update({ where: { id: listing.id }, data: { status: 'cancelled' } })
   return { ok: true }
 }
