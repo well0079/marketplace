@@ -13,9 +13,11 @@ export async function listEvents(req: Request, res: Response) {
   const q = typeof req.query.q === 'string' && req.query.q.trim() ? req.query.q.trim() : undefined
   const category = typeof req.query.category === 'string' && req.query.category.trim() ? req.query.category.trim() : undefined
   const date = typeof req.query.date === 'string' && req.query.date.trim() ? req.query.date.trim() : undefined
+  const periodRaw = typeof req.query.period === 'string' ? req.query.period : undefined
+  const period = periodRaw === 'today' || periodRaw === 'weekend' || periodRaw === 'month' ? periodRaw : undefined
   const sort = typeof req.query.sort === 'string' && req.query.sort.trim() ? req.query.sort.trim() : undefined
 
-  res.json(await events.listEvents({ q, category, date, sort, page, limit }))
+  res.json(await events.listEvents({ q, category, date, period, sort, page, limit }))
 }
 
 export async function getEvent(req: Request, res: Response) {

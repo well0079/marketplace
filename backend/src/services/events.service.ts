@@ -14,6 +14,11 @@ export const MAX_RESERVATION_QUANTITY = 4
 const SORTS = new Set(['relevance', 'date', 'price_asc', 'price_desc'])
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
+// Busca sem acento e sem diferença de caixa (para comparação em memória)
+function normalizeText(text: string): string {
+  return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+}
+
 type OfferWithHeld = {
   id: string
   ticketType: string
@@ -38,7 +43,38 @@ export function availabilityOf(offer: { quantity: number }, held: number): numbe
   return Math.max(0, offer.quantity - held)
 }
 
-export type ListEventsInput = { q?: string; category?: string; date?: string; sort?: string; page: number; limit: number }
+export type ListEventsInput = {
+  q?: string
+  category?: string
+  date?: string
+  period?: 'today' | 'weekend' | 'month'
+  sort?: string
+  page: number
+  limit: number
+}
+
+// Intervalos de data no fuso America/Sao_Paulo (UTC-3)
+function dateRangeFor(period: 'today' | 'weekend' | 'month'): { gte: Date; lt: Date } | undefined {
+  const now = new Date()
+  const sp = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
+  sp.setHours(0, 0, 0, 0)
+  // converter de volta para UTC (SP = UTC-3)
+  const startUtc = new Date(sp.getTime() - 3 * 60 * 60 * 1000)
+  if (period === 'today') return { gte: startUtc, lt: new Date(startUtc.getTime() + 24 * 60 * 60 * 1000) }
+  if (period === 'weekend') {
+    const day = startUtc.getDay()
+    const daysToSaturday = (6 - day + 7) % 7
+    const sat = new Date(startUtc.getTime() + daysToSaturday * 86400000)
+    const mon = new Date(sat.getTime() + 2 * 86400000)
+    return { gte: sat, lt: mon }
+  }
+  if (period === 'month') {
+    const end = new Date(startUtc)
+    end.setMonth(end.getMonth() + 1, 1)
+    return { gte: startUtc, lt: end }
+  }
+  return undefined
+}
 
 export type EventListItem = {
   id: string
@@ -78,9 +114,16 @@ export async function listEvents(input: ListEventsInput): Promise<{
   }
   if (input.category) where.category = { equals: input.category, mode: 'insensitive' }
   if (input.date) {
-    const dayStart = new Date(`${input.date}T00:00:00.000Z`)
+    // fuso America/Sao_Paulo (UTC-3): dia começa às 03:00 UTC
+    const dayStart = new Date(`${input.date}T03:00:00.000Z`)
     const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000)
     where.sessions = { some: { startsAt: { gte: dayStart, lt: dayEnd } } }
+  }
+  if (input.period) {
+    const range = dateRangeFor(input.period)
+    if (range) {
+      where.sessions = { ...where.sessions as Prisma.EventSessionListRelationFilter, some: { ...(where.sessions as Prisma.EventSessionListRelationFilter | undefined)?.some, startsAt: range } }
+    }
   }
 
   // Dataset pequeno (catálogo curado): agregações de preço/data em memória após o filtro SQL
@@ -129,22 +172,33 @@ export async function listEvents(input: ListEventsInput): Promise<{
 
   const sort = input.sort ?? 'relevance'
   items.sort((a, b) => {
-    if (sort === 'price_asc') return (a._sortPrice ?? Number.MAX_SAFE_INTEGER) - (b._sortPrice ?? Number.MAX_SAFE_INTEGER)
-    if (sort === 'price_desc') return (b._sortPrice ?? Number.MAX_SAFE_INTEGER) - (a._sortPrice ?? Number.MAX_SAFE_INTEGER)
-    if (sort === 'date') return a._sortDate - b._sortDate
+    if (sort === 'price_asc') return (a._sortPrice ?? Number.MAX_SAFE_INTEGER) - (b._sortPrice ?? Number.MAX_SAFE_INTEGER) || a.id.localeCompare(b.id)
+    if (sort === 'price_desc') return (b._sortPrice ?? Number.MAX_SAFE_INTEGER) - (a._sortPrice ?? Number.MAX_SAFE_INTEGER) || a.id.localeCompare(b.id)
+    if (sort === 'date') return a._sortDate - b._sortDate || a.id.localeCompare(b.id)
     // relevance: destaque primeiro, depois mais recente
     if (a.featured !== b.featured) return a.featured ? -1 : 1
-    return b._sortDate - a._sortDate
+    return b._sortDate - a._sortDate || a.id.localeCompare(b.id)
   })
 
-  const total = items.length
+  // filtro de texto sem acento em memória (refina o filtro SQL que é case-insensitive mas não remove acentos)
+  const filtered = input.q
+    ? items.filter((e) => {
+        const q = normalizeText(input.q!)
+        return (
+          normalizeText(e.name).includes(q) ||
+          normalizeText(e.category).includes(q) ||
+          normalizeText(e.organizer).includes(q)
+        )
+      })
+    : items
+  const totalCount = filtered.length
   const start = (input.page - 1) * input.limit
   return {
-    items: items.slice(start, start + input.limit).map(({ _sortPrice: _p, _sortDate: _d, ...rest }) => rest),
+    items: filtered.slice(start, start + input.limit).map(({ _sortPrice: _p, _sortDate: _d, ...rest }) => rest),
     page: input.page,
     limit: input.limit,
-    total,
-    totalPages: Math.max(1, Math.ceil(total / input.limit)),
+    total: totalCount,
+    totalPages: Math.max(1, Math.ceil(totalCount / input.limit)),
   }
 }
 

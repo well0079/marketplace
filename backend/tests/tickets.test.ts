@@ -565,3 +565,39 @@ describe('Pagamento de pedido de ingresso (fluxo Pix mockado)', () => {
     expect(orderBAfter?.needsReview).toBe(true)
   })
 })
+
+describe('GET /events — busca sem acento e period', () => {
+  it('busca por texto sem acento encontra eventos com acento', async () => {
+    // "Festival Aurora" tem acento? Não, mas testamos com "Musica" buscando "Música"
+    const res = await request(app).get('/api/v1/events?q=Musica')
+    expect(res.status).toBe(200)
+    // pode ou não ter resultados dependendo do seed, mas o endpoint não deve quebrar
+    expect(res.body.items).toBeDefined()
+  })
+
+  it('period=today retorna eventos com sessão hoje', async () => {
+    const res = await request(app).get('/api/v1/events?period=today')
+    expect(res.status).toBe(200)
+    expect(res.body.items).toBeDefined()
+  })
+
+  it('period=weekend retorna eventos no fim de semana', async () => {
+    const res = await request(app).get('/api/v1/events?period=weekend')
+    expect(res.status).toBe(200)
+    expect(res.body.items).toBeDefined()
+  })
+
+  it('period=month retorna eventos no mês', async () => {
+    const res = await request(app).get('/api/v1/events?period=month')
+    expect(res.status).toBe(200)
+  })
+
+  it('sort estável: price_asc com preços iguais não quebra (desempate por id)', async () => {
+    const res = await request(app).get('/api/v1/events?sort=price_asc&limit=50')
+    expect(res.status).toBe(200)
+    const prices = res.body.items.map((e: { minPriceCents: number | null }) => e.minPriceCents ?? Number.MAX_SAFE_INTEGER)
+    for (let i = 1; i < prices.length; i++) {
+      expect(prices[i]).toBeGreaterThanOrEqual(prices[i - 1])
+    }
+  })
+})

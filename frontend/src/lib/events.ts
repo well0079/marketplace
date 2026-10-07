@@ -87,11 +87,12 @@ export type ReservationPayload = {
 }
 
 export const eventsApi = {
-  list: (params: { q?: string; category?: string; date?: string; sort?: string; page?: number }) => {
+  list: (params: { q?: string; category?: string; date?: string; period?: string; sort?: string; page?: number }) => {
     const search = new URLSearchParams()
     if (params.q) search.set('q', params.q)
     if (params.category) search.set('category', params.category)
     if (params.date) search.set('date', params.date)
+    if (params.period) search.set('period', params.period)
     if (params.sort) search.set('sort', params.sort)
     if (params.page) search.set('page', String(params.page))
     const query = search.toString()
