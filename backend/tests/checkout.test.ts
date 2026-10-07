@@ -20,7 +20,6 @@ const getTransaction = vi.mocked(fastsoft.getTransaction)
 const suffix = Date.now()
 const USER_A = { name: 'Rui Checkout', email: `rui.checkout.${suffix}@teste.com`, password: 'Senha1@a' }
 const USER_B = { name: 'Sofia Checkout', email: `sofia.checkout.${suffix}@teste.com`, password: 'Senha1@a' }
-const CPF_A = '529.982.247-25'
 const CPF_DIGITS_A = '52998224725'
 const PHONE_DIGITS_A = '11987654321'
 
