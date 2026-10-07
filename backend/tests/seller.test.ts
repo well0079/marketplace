@@ -11,7 +11,6 @@ let authA: string
 let authB: string
 let userAId: string
 const createdEventIds: string[] = []
-const createdCouponIds: string[] = []
 
 function authCookieFrom(res: request.Response): string {
   const setCookie = res.headers['set-cookie']

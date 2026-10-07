@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SignupPage } from './SignupPage'
 import { LoginPage } from './LoginPage'
 import { TicketsPage } from './TicketsPage'
+import type { MyListingsPayload } from '../lib/events'
 import { TopBar as TopBarAccount } from '../components/ingressos/TopBarAccount'
 import { safeRedirect } from '../lib/auth'
 import { TicketNotFoundPage } from './TicketStaticPages'
@@ -232,8 +233,21 @@ describe('TicketsPage — abas segmentadas', () => {
     return client
   }
 
-  function renderTickets() {
+  const listingsEmpty: MyListingsPayload = { items: [], counts: { active: 0, pending_review: 0, sold: 0, cancelled: 0 } }
+  const listingItem = {
+    id: 'l1', status: 'active', ticketType: 'Inteira', ticketCategory: 'Pista',
+    quantity: 2, priceCents: 15000, createdAt: '2026-10-05T12:00:00.000Z',
+    event: { name: 'Festival Aurora 2026', slug: 'festival-aurora-2026' },
+    session: { startsAt: '2026-11-14T17:00:00.000Z', city: 'São Paulo', venue: 'Autódromo' },
+  }
+
+  function renderTickets(listings = listingsEmpty) {
     const client = seedTickets()
+    fetchMock.mockImplementation(async (url: string) => {
+      if (String(url).includes('/listings/mine')) return jsonResponse(listings)
+      if (String(url).includes('/listings/sold')) return jsonResponse([])
+      return jsonResponse({}, 404)
+    })
     return render(
       <QueryClientProvider client={client}>
         <MemoryRouter initialEntries={['/tickets']}>
@@ -257,8 +271,38 @@ describe('TicketsPage — abas segmentadas', () => {
     const user = userEvent.setup()
     renderTickets()
     await user.click(screen.getByText(/Meus anúncios/))
-    expect(screen.getByText('Nada por aqui ainda')).toBeTruthy()
+    await waitFor(() => expect(screen.getByText('Você ainda não anunciou ingressos')).toBeTruthy())
     expect(screen.getByText('Anunciar ingresso')).toBeTruthy()
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/listings/mine'))).toBe(true)
+  })
+
+  it('Meus anúncios lista o anúncio vindo de GET /listings/mine com cancelar', async () => {
+    const user = userEvent.setup()
+    renderTickets({ items: [listingItem], counts: { active: 1, pending_review: 0, sold: 0, cancelled: 0 } })
+    await user.click(screen.getByText(/Meus anúncios/))
+    await waitFor(() => expect(screen.getByText('Festival Aurora 2026')).toBeTruthy())
+    expect(screen.getByText(/Meus anúncios 1/)).toBeTruthy()
+    expect(screen.getByText('R$ 150,00')).toBeTruthy()
+    expect(screen.getByText('Pista · Inteira · 2 unidades')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Cancelar anúncio' })).toBeTruthy()
+  })
+
+  it('cancela anúncio via DELETE e remove da lista após invalidação', async () => {
+    const user = userEvent.setup()
+    renderTickets({ items: [listingItem], counts: { active: 1, pending_review: 0, sold: 0, cancelled: 0 } })
+    await user.click(screen.getByText(/Meus anúncios/))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Cancelar anúncio' })).toBeTruthy())
+    fetchMock.mockImplementation(async (url: string, init?: { method?: string }) => {
+      if (String(url).includes('/listings/l1') && init?.method === 'DELETE') {
+        return jsonResponse({ ok: true })
+      }
+      if (String(url).includes('/listings/mine')) return jsonResponse(listingsEmpty)
+      if (String(url).includes('/listings/sold')) return jsonResponse([])
+      return jsonResponse({}, 404)
+    })
+    await user.click(screen.getByRole('button', { name: 'Cancelar anúncio' }))
+    await waitFor(() => expect(screen.getByText('Você ainda não anunciou ingressos')).toBeTruthy())
+    expect(fetchMock.mock.calls.some(([url, init]) => String(url).includes('/listings/l1') && (init as { method?: string })?.method === 'DELETE')).toBe(true)
   })
 
   it('navega as abas com setas (teclado)', async () => {
