@@ -7,7 +7,7 @@ import * as seller from '../services/seller.service'
 function requireUser(req: Request) {
   const user = getSessionUser(req)
   if (!user) throw new ApiError(401, 'UNAUTHENTICATED', 'Não autenticado')
-  return user
+  return user!
 }
 
 export async function getSellerMe(req: Request, res: Response) {
