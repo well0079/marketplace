@@ -148,7 +148,7 @@ export async function createListing(input: CreateListingInput) {
     where: { sellerId: input.userId, status: { in: ['active', 'pending_review'] } },
   })
   if (activeCount >= MAX_ACTIVE_LISTINGS) {
-    throw new ApiError(422, 'MAX_LISTINGS', `Você já tem ${MAX_ACTIVE_LISTINGS} anúncios ativos.`)
+    throw new ApiError(409, 'MAX_LISTINGS', `Você já tem ${MAX_ACTIVE_LISTINGS} anúncios ativos.`)
   }
 
   const status = autoApprove() ? 'active' : 'pending_review'
