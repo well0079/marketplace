@@ -178,3 +178,36 @@ export function categoryGradient(category: string): string {
 export function cancelReservationApi(reservationId: string) {
   return api.delete<{ ok: boolean }>(`/reservations/${encodeURIComponent(reservationId)}`)
 }
+
+// ─── Vendedor e anúncios (tema ingressos) ───
+
+export type SellerProfilePayload = { verificationLevel: string; cep: string; uf: string; city: string; neighborhood: string; street: string; number: string; complement: string | null; createdAt: string }
+
+export type ListingItem = {
+  id: string; status: string; ticketType: string; ticketCategory: string;
+  quantity: number; priceCents: number; createdAt: string;
+  event: { name: string; slug: string };
+  session: { startsAt: string; city: string; venue: string };
+}
+
+export type MyListingsPayload = {
+  items: ListingItem[]
+  counts: { active: number; pending_review: number; sold: number; cancelled: number }
+}
+
+export type SoldListing = {
+  id: string; ticketType: string; ticketCategory: string; quantity: number;
+  priceCents: number; soldAt: string; event: { name: string; slug: string }
+}
+
+export const sellerApi = {
+  me: () => api.get<SellerProfilePayload | null>('/sellers/me'),
+  verify: (consent: boolean, address: Record<string, string>) =>
+    api.post<{ verificationLevel: string }>('/sellers/verify', { consent, address }),
+  createListing: (input: { sessionId: string; ticketType: string; ticketCategory: string; quantity: number; priceCents: number }) =>
+    api.post<{ id: string; status: string }>('/listings', input),
+  myListings: (status?: string) =>
+    api.get<MyListingsPayload>(`/listings/mine${status ? `?status=${status}` : ''}`),
+  cancelListing: (id: string) => api.delete<{ ok: boolean }>(`/listings/${encodeURIComponent(id)}`),
+  sold: () => api.get<SoldListing[]>('/listings/sold'),
+}

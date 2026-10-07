@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { EventsPage } from '../lib/events'
 import { useQuery } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { eventsApi, formatEventDay, formatEventMonthYear } from '../lib/events'
 import { cn } from '../lib/cn'
 import { Button } from '../components/ui/Button'

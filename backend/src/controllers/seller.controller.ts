@@ -4,21 +4,16 @@ import { getSessionUser } from '../lib/auth'
 import { enforceRateLimit, rateLimitFromEnv } from '../lib/rate-limit-error'
 import * as seller from '../services/seller.service'
 
-function requireUser(req: Request) {
-  const user = getSessionUser(req)
-  if (!user) throw new ApiError(401, 'UNAUTHENTICATED', 'Não autenticado')
-  return user!
-}
-
 export async function getSellerMe(req: Request, res: Response) {
-  const user = (await requireUser(req))!
+  const user = await getSessionUser(req)
+  if (!user) throw new ApiError(401, 'UNAUTHENTICATED', 'Não autenticado')
   res.json(await seller.getSellerMe(user.id))
 }
 
 export async function postVerifySeller(req: Request, res: Response) {
-  const user = (await requireUser(req))!
+  const user = await getSessionUser(req)
+  if (!user) throw new ApiError(401, 'UNAUTHENTICATED', 'Não autenticado')
   enforceRateLimit(`seller:verify:${user.id}`, rateLimitFromEnv('SIGNUP_RATE_LIMIT', 10))
-
   const consent = req.body?.consent === true
   const address = {
     cep: typeof req.body?.address?.cep === 'string' ? req.body.address.cep : '',
@@ -34,7 +29,8 @@ export async function postVerifySeller(req: Request, res: Response) {
 }
 
 export async function postListing(req: Request, res: Response) {
-  const user = (await requireUser(req))!
+  const user = await getSessionUser(req)
+  if (!user) throw new ApiError(401, 'UNAUTHENTICATED', 'Não autenticado')
   enforceRateLimit(`seller:listing:${user.id}`, rateLimitFromEnv('SIGNUP_RATE_LIMIT', 10))
   if (!(await seller.isVerifiedSeller(user.id))) {
     throw new ApiError(403, 'SELLER_NOT_VERIFIED', 'Complete a verificação de vendedor primeiro.')
@@ -44,23 +40,25 @@ export async function postListing(req: Request, res: Response) {
   const ticketCategory = typeof req.body?.ticketCategory === 'string' ? req.body.ticketCategory.trim() : ''
   const quantity = typeof req.body?.quantity === 'number' ? req.body.quantity : Number.parseInt(String(req.body?.quantity), 10)
   const priceCents = typeof req.body?.priceCents === 'number' ? req.body.priceCents : Number.parseInt(String(req.body?.priceCents), 10)
-
   const result = await seller.createListing({ userId: user.id, sessionId, ticketType, ticketCategory, quantity, priceCents })
   res.status(201).json(result)
 }
 
 export async function getMyListings(req: Request, res: Response) {
-  const user = (await requireUser(req))!
+  const user = await getSessionUser(req)
+  if (!user) throw new ApiError(401, 'UNAUTHENTICATED', 'Não autenticado')
   const status = typeof req.query.status === 'string' ? req.query.status : undefined
   res.json(await seller.listMyListings(user.id, status))
 }
 
 export async function deleteListing(req: Request, res: Response) {
-  const user = (await requireUser(req))!
+  const user = await getSessionUser(req)
+  if (!user) throw new ApiError(401, 'UNAUTHENTICATED', 'Não autenticado')
   res.json(await seller.cancelListing(user.id, String(req.params.id ?? '')))
 }
 
 export async function getSoldListings(req: Request, res: Response) {
-  const user = (await requireUser(req))!
+  const user = await getSessionUser(req)
+  if (!user) throw new ApiError(401, 'UNAUTHENTICATED', 'Não autenticado')
   res.json(await seller.listSoldListings(user.id))
 }
