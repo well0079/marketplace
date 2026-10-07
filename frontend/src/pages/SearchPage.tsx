@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { EventsPage } from '../lib/events'
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { eventsApi, formatEventDay, formatEventMonthYear } from '../lib/events'
@@ -128,7 +129,7 @@ function SearchResults(props: SearchResultsProps) {
       q: q || undefined, category: category || undefined,
       period: period || undefined, sort: sort || undefined, page,
     }),
-    placeholderData: (previous: unknown) => previous,
+    placeholderData: (previous: EventsPage | undefined) => previous,
   })
 
   if (results.isPending) {
