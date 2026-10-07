@@ -26,6 +26,8 @@ model User {
   questions Question[]
   offers        Offer[]
   reservations  Reservation[]
+  sellerProfile SellerProfile?
+  listings      Listing[]
   // Tema ingressos: celular verificado em E.164 e CPF só mascarado + hash (nunca completo)
   phone           String?   @unique
   phoneVerifiedAt DateTime?
@@ -294,8 +296,9 @@ model EventSession {
   city     String
   uf       String
   venue    String
-  event   Event   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event   Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
   offers  Offer[]
+  listings Listing[]
   @@index([eventId, startsAt])
 }
 
@@ -315,6 +318,44 @@ model Offer {
   seller       User?         @relation(fields: [sellerId], references: [id], onDelete: SetNull)
   reservations Reservation[]
   @@index([sessionId, status, priceCents])
+}
+
+// Perfil do vendedor: verificação "básica" (consentimento + endereço de cobrança).
+// Sem CPF novo (vínculo = conta), sem upload de documento, sem biometria, sem KYC.
+model SellerProfile {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @unique @db.Uuid
+  verificationLevel String   @default("basic")
+  consentAt         DateTime
+  cep               String
+  uf                String
+  city              String
+  neighborhood      String
+  street            String
+  number            String
+  complement        String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listings Listing[]
+}
+
+// Anúncio de ingresso por sessão. sellerId nulo = plataforma.
+// status: active (à venda) | pending_review (aguardando moderação) | sold | cancelled
+model Listing {
+  id             String   @id @default(uuid()) @db.Uuid
+  sessionId      String   @db.Uuid
+  sellerId       String   @db.Uuid
+  ticketType     String
+  ticketCategory String
+  quantity       Int
+  priceCents     Int
+  status         String   @default("active")
+  createdAt      DateTime @default(now())
+  session EventSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  seller  User             @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  @@index([sessionId, status])
+  @@index([sellerId, status])
 }
 
 // Cupom de desconto do tema ingressos: desconto sobre o PREÇO do ingresso; a taxa

@@ -8,6 +8,7 @@ import { cancelOrder, createOrder, getOrder, listOrders } from './controllers/or
 import { createPayment, getPayment } from './controllers/payment.controller'
 import { fastsoftWebhook } from './controllers/webhook.controller'
 import { validateCoupon } from './controllers/coupon.controller'
+import { deleteListing, getMyListings, getSoldListings, getSellerMe, postListing, postVerifySeller } from './controllers/seller.controller'
 import {
   cancelReservation,
   createReservation,
@@ -63,5 +64,12 @@ router.get('/sessions/:id', asyncHandler(getSession))
 router.get('/sessions/:id/offers', asyncHandler(listSessionOffers))
 router.post('/reservations', asyncHandler(createReservation))
 router.post('/coupons/validate', asyncHandler(validateCoupon))
+// Vendedor (tema ingressos)
+router.get('/sellers/me', asyncHandler(getSellerMe))
+router.post('/sellers/verify', asyncHandler(postVerifySeller))
+router.post('/listings', asyncHandler(postListing))
+router.get('/listings/mine', asyncHandler(getMyListings))
+router.delete('/listings/:id', asyncHandler(deleteListing))
+router.get('/listings/sold', asyncHandler(getSoldListings))
 router.get('/reservations/active', asyncHandler(listReservations))
 router.delete('/reservations/:id', asyncHandler(cancelReservation))
