@@ -22,7 +22,8 @@ import { LoginPage } from './pages/LoginPage'
 import { SearchPage } from './pages/SearchPage'
 import { TicketsPage } from './pages/TicketsPage'
 import { TicketOrderDetailPage } from './pages/TicketOrderDetailPage'
-import { SellersVerifySoonPage } from './pages/SellersVerifySoonPage'
+import { SellersVerifyPage } from './pages/SellersVerifyPage'
+import { SellersNewPage } from './pages/SellersNewPage'
 import { CheckoutPage } from './pages/CheckoutPage'
 import { TermsPage, PrivacyPage } from './pages/TicketStaticPages'
 import { TicketNotFoundPage as TicketNotFound } from './pages/TicketStaticPages'
@@ -79,7 +80,8 @@ export function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/tickets" element={<TicketsPage />} />
           <Route path="/tickets/:code" element={<TicketOrderDetailPage />} />
-          <Route path="/sellers/verify" element={<SellersVerifySoonPage />} />
+          <Route path="/sellers/new" element={<SellersNewPage />} />
+          <Route path="/sellers/verify" element={<SellersVerifyPage />} />
           <Route path="/checkout" element={<CheckoutPage />} />
           <Route path="/payments/:id" element={<PixPayment />} />
           <Route path="/checkout/success" element={<CheckoutSuccess />} />
