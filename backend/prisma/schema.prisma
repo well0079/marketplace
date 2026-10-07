@@ -312,11 +312,13 @@ model Offer {
   priceCents     Int
   quantity       Int
   sellerId       String?  @db.Uuid
-  status         String   @default("active") // active | sold | cancelled
+  status         String   @default("active") // active | pending_review | sold | cancelled
   createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
   session      EventSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   seller       User?         @relation(fields: [sellerId], references: [id], onDelete: SetNull)
   reservations Reservation[]
+  listing      Listing?
   @@index([sessionId, status, priceCents])
 }
 
@@ -350,9 +352,11 @@ model Listing {
   quantity       Int
   priceCents     Int
   status         String   @default("active")
+  offerId        String?  @unique @db.Uuid
   createdAt      DateTime @default(now())
   session EventSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   seller  User             @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  offer   Offer?           @relation(fields: [offerId], references: [id], onDelete: SetNull)
   @@index([sessionId, status])
   @@index([sellerId, status])
 }

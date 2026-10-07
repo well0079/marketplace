@@ -197,7 +197,8 @@ export type MyListingsPayload = {
 
 export type SoldListing = {
   id: string; ticketType: string; ticketCategory: string; quantity: number;
-  priceCents: number; soldAt: string; event: { name: string; slug: string }
+  priceCents: number; soldAt: string; orderCode: string | null; status: string;
+  event: { name: string; slug: string }
 }
 
 export const sellerApi = {

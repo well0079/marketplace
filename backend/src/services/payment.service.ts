@@ -316,6 +316,14 @@ export async function applyTransition(paymentId: string, nextStatus: string, pai
         // ── Pedido de INGRESSO: converte a reserva e baixa a oferta ──
         // Reserva ativa e não expirada: converte e decrementa a oferta
         // (deixar de contar a reserva + baixar quantity mantém a disponibilidade consistente).
+        // C1: quantity chegando a 0 → oferta e anúncio vinculados viram `sold`.
+        const markSoldIfEmpty = async (offerId: string) => {
+          const offer = await tx.offer.findUnique({ where: { id: offerId }, select: { quantity: true } })
+          if (offer && offer.quantity <= 0) {
+            await tx.offer.updateMany({ where: { id: offerId }, data: { status: 'sold' } })
+            await tx.listing.updateMany({ where: { offerId }, data: { status: 'sold' } })
+          }
+        }
         const reservation = payment.order.reservationId
           ? await tx.reservation.findUnique({ where: { id: payment.order.reservationId } })
           : null
@@ -325,6 +333,7 @@ export async function applyTransition(paymentId: string, nextStatus: string, pai
             where: { id: ticket.offerId },
             data: { quantity: { decrement: reservation.quantity } },
           })
+          await markSoldIfEmpty(ticket.offerId)
         } else {
           // Reserva expirada/cancelada: valida a disponibilidade AGORA antes de baixar.
           const offer = await tx.offer.findUnique({ where: { id: ticket.offerId } })
@@ -339,6 +348,7 @@ export async function applyTransition(paymentId: string, nextStatus: string, pai
               where: { id: offer.id },
               data: { quantity: { decrement: quantity } },
             })
+            await markSoldIfEmpty(offer.id)
           } else {
             needsReview = true
           }

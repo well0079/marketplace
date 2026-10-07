@@ -152,18 +152,35 @@ export async function createListing(input: CreateListingInput) {
   }
 
   const status = autoApprove() ? 'active' : 'pending_review'
-  const listing = await prisma.listing.create({
-    data: {
-      sessionId: input.sessionId,
-      sellerId: input.userId,
-      ticketType: input.ticketType,
-      ticketCategory: input.ticketCategory,
-      quantity: input.quantity,
-      priceCents: input.priceCents,
-      status,
-    },
+  // C1: anúncio e oferta nascem JUNTOS na mesma transação — a oferta é o que
+  // o comprador vê/reserva; o anúncio espelha o status dela.
+  const created = await prisma.$transaction(async (tx) => {
+    const offer = await tx.offer.create({
+      data: {
+        sessionId: input.sessionId,
+        ticketType: input.ticketType,
+        ticketCategory: input.ticketCategory,
+        priceCents: input.priceCents,
+        quantity: input.quantity,
+        sellerId: input.userId,
+        status,
+      },
+    })
+    const listing = await tx.listing.create({
+      data: {
+        sessionId: input.sessionId,
+        sellerId: input.userId,
+        ticketType: input.ticketType,
+        ticketCategory: input.ticketCategory,
+        quantity: input.quantity,
+        priceCents: input.priceCents,
+        status: offer.status,
+        offerId: offer.id,
+      },
+    })
+    return listing
   })
-  return { id: listing.id, status: listing.status, quantity: listing.quantity, priceCents: listing.priceCents }
+  return { id: created.id, status: created.status, quantity: created.quantity, priceCents: created.priceCents }
 }
 
 export async function listMyListings(userId: string, status?: string) {
@@ -207,32 +224,82 @@ export async function cancelListing(userId: string, listingId: string) {
   if (listing.status !== 'active' && listing.status !== 'pending_review') {
     throw new ApiError(422, 'INVALID_STATUS', 'Este anúncio não pode mais ser cancelado.')
   }
-  // TODO(bloco 5): quando o Listing criar uma Offer correspondente, verificar
-  // se há reserva ativa nessa oferta antes de cancelar
-  await prisma.listing.update({ where: { id: listing.id }, data: { status: 'cancelled' } })
+  // C1: cancela a OFERTA junto, na mesma transação. Com reserva ativa ou
+  // pedido pendente/pago ligado à oferta → 409 (conflito de estado).
+  await prisma.$transaction(async (tx) => {
+    if (listing.offerId) {
+      const offer = await tx.offer.findUnique({ where: { id: listing.offerId } })
+      if (offer) {
+        const activeReservation = await tx.reservation.findFirst({
+          where: { offerId: offer.id, status: 'active', expiresAt: { gt: new Date() } },
+        })
+        if (activeReservation) {
+          throw new ApiError(409, 'RESERVATION_ACTIVE', 'Há uma reserva ativa neste anúncio. Aguarde a expiração.')
+        }
+        const linkedOrder = await tx.order.findFirst({
+          where: { status: { in: ['pending', 'paid'] }, ticketSnapshot: { path: ['offerId'], equals: offer.id } },
+        })
+        if (linkedOrder) {
+          throw new ApiError(409, 'ORDER_LINKED', 'Existe um pedido ligado a este anúncio — ele não pode ser cancelado.')
+        }
+        await tx.offer.update({ where: { id: offer.id }, data: { status: 'cancelled' } })
+      }
+    }
+    await tx.listing.update({ where: { id: listing.id }, data: { status: 'cancelled' } })
+  })
   return { ok: true }
 }
 
+// C1: aprovação de anúncio SEM painel admin — script de linha de comando
+// (pnpm approve-listing <id>), com log de auditoria. Nenhuma rota pública.
+export async function approveListing(listingId: string, actor = 'cli') {
+  const listing = await prisma.listing.findUnique({ where: { id: listingId } })
+  if (!listing) throw new ApiError(404, 'NOT_FOUND', 'Anúncio não encontrado')
+  if (listing.status !== 'pending_review') {
+    throw new ApiError(422, 'INVALID_STATUS', `Só anúncios em análise podem ser aprovados (status atual: ${listing.status}).`)
+  }
+  const updated = await prisma.$transaction(async (tx) => {
+    const listingNow = await tx.listing.update({ where: { id: listing.id }, data: { status: 'active' } })
+    if (listing.offerId) {
+      await tx.offer.updateMany({ where: { id: listing.offerId, status: 'pending_review' }, data: { status: 'active' } })
+    }
+    return listingNow
+  })
+  // Log de auditoria (rastreável em logs do servidor)
+  console.log(`[approve-listing] listing=${listing.id} offer=${listing.offerId ?? 'sem-vínculo'} pending_review → active por ${actor}`)
+  return { id: updated.id, status: updated.status }
+}
+
 export async function listSoldListings(userId: string) {
-  const listings = await prisma.listing.findMany({
+  // C1: vendas derivadas das OFERTAS vendidas do vendedor (fonte única de
+  // verdade da venda). NUNCA expõe nome, e-mail, CPF ou telefone do comprador.
+  const offers = await prisma.offer.findMany({
     where: { sellerId: userId, status: 'sold' },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { updatedAt: 'desc' },
     include: {
       session: { include: { event: { select: { name: true, slug: true } } } },
+      listing: { select: { quantity: true } },
     },
   })
-  return listings.map((listing) => {
-    const snap = listing.session
+  const sold = await Promise.all(offers.map(async (offer) => {
+    const order = await prisma.order.findFirst({
+      where: { status: 'paid', ticketSnapshot: { path: ['offerId'], equals: offer.id } },
+      orderBy: { createdAt: 'asc' },
+      select: { code: true },
+    })
     return {
-      id: listing.id,
-      ticketType: listing.ticketType,
-      ticketCategory: listing.ticketCategory,
-      quantity: listing.quantity,
-      priceCents: listing.priceCents,
-      soldAt: listing.createdAt.toISOString(),
-      event: { name: snap.event.name, slug: snap.event.slug },
+      id: offer.id,
+      ticketType: offer.ticketType,
+      ticketCategory: offer.ticketCategory,
+      quantity: offer.listing?.quantity ?? offer.quantity,
+      priceCents: offer.priceCents,
+      soldAt: offer.updatedAt.toISOString(),
+      orderCode: order?.code ?? null,
+      status: 'sold',
+      event: { name: offer.session.event.name, slug: offer.session.event.slug },
       // NUNCA expor dados do comprador (nome, e-mail, CPF, telefone)
     }
-  })
+  }))
+  return sold
 }
 

@@ -241,7 +241,9 @@ function SoldTab({ query }: { query: ReturnType<typeof useQuery<SoldListing[] | 
             <p className="text-t-caption text-ticket-muted">
               {item.ticketCategory} · {item.ticketType} · {item.quantity} un.
             </p>
-            <p className="text-t-caption text-ticket-muted">{formatDate(item.soldAt)}</p>
+            <p className="text-t-caption text-ticket-muted">
+              Vendido em {formatDate(item.soldAt)}{item.orderCode ? ` · pedido ${item.orderCode}` : ''}
+            </p>
           </div>
           <p className="font-sora text-t-price-m text-ticket-primary">{formatBRL(item.priceCents)}</p>
         </li>

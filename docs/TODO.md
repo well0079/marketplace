@@ -40,3 +40,14 @@
 - [ ] Catálogo: filtros por preço/faixa se a API vier a suportar; hoje apenas q/category/sort.
 - [ ] Infra: `docker-compose.yml` está pronto mas a máquina de dev usa PostgreSQL embarcado
       (ver memória do projeto); `pnpm db:up` funciona apenas com Docker instalado.
+
+## Tema ingressos — Parte 2 (C1, commit pendente)
+
+- [ ] **Repasse ao vendedor** (saque/PIX do vendedor) FORA do escopo do C1 — sem ele,
+      `SELLER_OFFERS_AUTO_APPROVE` **precisa ficar `false` em produção**: todo anúncio
+      de terceiro nasce `pending_review` e só vira comprável via
+      `pnpm approve-listing <id>` (auditoria no log).
+- [ ] **Transferência confirmada do ingresso** (e-mail de recebimento vira ingresso na
+      conta do destinatário) — fora do escopo do C1.
+- [ ] **KYC do vendedor** — fora do escopo; verificação continua "básica"
+      (consentimento + endereço de cobrança).
