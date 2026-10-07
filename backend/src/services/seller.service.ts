@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { ApiError } from '../lib/errors'
+import { onlyDigits } from './cpf'
 
 // Vendedor e anúncios (tema ingressos, bloco 5b). Verificação "básica":
 // consentimento + endereço de cobrança. Sem KYC/biometria/repasse.
